@@ -7,3 +7,7 @@ filterjit.py is an extract of Roger Labbe's FilterPy (https://filterpy.readthedo
 SSA_Agents_v2.py runs several different agents against the environment and compares their performance. 
 
 training_a2c.py trains the Stable Baselines' A2C policy against the SSA environment, https://stable-baselines.readthedocs.io/.
+
+envs/__init__.py register's environment with Gym
+
+envs/ssa_tasker_simple_1.py contains the Class and supporting functions for MAGE v1 conforming to OpenAI Gym's standards
