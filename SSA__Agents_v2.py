@@ -96,22 +96,6 @@ ax.legend(loc='upper left')
 ax
 plt.savefig('Figure-50-RSO-10-Eps-480-TS.pdf')
 
-'''
-fig, ax = plt.subplots(figsize=(5,5))
-
-
-g = sns.lineplot(x="Hours", y="Reward (Trace{P})", hue="Agent", data=df)
-
-box = g.get_position()
-g.set_position([box.x0, box.y0, box.width * 0.85, box.height]) # resize position
-
-# Put a legend to the right side
-g.legend(loc='lower center', bbox_to_anchor=(1.25, 0.5), ncol=1)
-'''
 plt.show()
 
-
-
-env.plot()
-#env.chart()
 env.close()
