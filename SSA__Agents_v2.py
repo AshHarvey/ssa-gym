@@ -26,8 +26,7 @@ def steps_to_time(step,dt=30):
     time = step*dt/60/60
     return time #in hours
 
-model2 = A2C.load("a2c_tasker_ts100k")
-#model2 = A2C.load("a2c_tasker_ts1m")
+model2 = A2C.load("a2c_tasker_ts16k")
 
 def ac2_agent(observation, env, model2=model2):
     action, _states = model2.predict(observation)
