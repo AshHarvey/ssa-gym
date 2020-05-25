@@ -224,7 +224,7 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov):
 
     return x, P
 
-#@njit
+@njit
 def sigma_points(x, P, lambda_, n):
     """ Computes the sigma points for an unscented Kalman filter
     given the mean (x) and covariance(P) of the filter.
@@ -316,7 +316,7 @@ def mean_z(z):
     return z_mean
 
 #@jit('[f8[:],f8[:,:],f8[:,:]](f8[:],f8[:,:],f8[:,:],f8[:],f8[:],f8[:,:],f8,i8)', nopython=True)
-#@njit
+@njit
 def predict(x, P, Wm, Wc, Q, dt, lambda_, fx):
         r"""
         Performs the predict step of the UKF. On return, self.x and
