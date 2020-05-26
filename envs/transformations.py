@@ -23,21 +23,6 @@ def get_eops():
     eop = pd.DataFrame(data=array, index=array[:, 3], columns=headers)
     return eop
 
-
-def get_eops2(year_fraction):
-    """
-   This function downloads the Earth Orientation Parameters (EOPs) from the IAU sources and returns them as a pandas
-        dataframe; https://datacenter.iers.org/eop.php
-    # in draft form, will be used to make an array version of dataframe based get_eops()
-    """
-    url = 'ftp://ftp.iers.org/products/eop/long-term/c01/eopc01.iau2000.1900-now.dat'
-    datasource = np.DataSource(url).open()
-    file = datasource.open()
-    array = np.genfromtxt(file, skip_header=1)
-    np.searchsorted(array[:1000, 0], year_fraction, side="left")
-    return eop
-
-
 def gcrs2irts_matrix_a(t, eop):
     """
     Purpose:
@@ -239,7 +224,8 @@ def itrs2azel(observer, targets):
     return aer
 
 
-def _itrs2azel(observer, targets):
+@njit
+def _itrs2azel(observer, target):
     """
     Purpose:
         Calculate the observed location(s) of a set of ITRS target coordinate(s) with respect to an observer coordinate
@@ -252,29 +238,28 @@ def _itrs2azel(observer, targets):
         aer is a numpy array of dimension [3] or [n,3], where 3 is the azimuth (radians), elevation (radians), slant
             range (meters) of the target points from the perspective of the observer point
     """
-    targets_t = targets.T
     x = observer[0]
     y = observer[1]
     z = observer[2]
-    dx = targets_t[0] - x
-    dy = targets_t[1] - y
-    dz = targets_t[2] - z
+    dx = target[0] - x
+    dy = target[1] - y
+    dz = target[2] - z
     cos_azimuth = (-z * x * dx - z * y * dy + (x ** 2 + y ** 2) * dz) / np.sqrt(
         (x ** 2 + y ** 2) * (x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
     sin_azimuth = (-y * dx + x * dy) / np.sqrt((x ** 2 + y ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    az = np.asarray(np.arctan2(sin_azimuth, cos_azimuth))
+    az = np.arctan2(sin_azimuth, cos_azimuth)
     cos_elevation = (x * dx + y * dy + z * dz) / np.sqrt((x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
     el = np.pi / 2 - np.arccos(cos_elevation)
-    sr = np.sqrt(np.sum(np.power((observer - targets), 2).T, axis=0))  # slant range
-    n = int(az.size)
+    sr = np.sqrt(np.sum(np.power((observer - target), 2).T, axis=0))  # slant range
+    '''n = int(az.size)
     for i in range(n):
         if n > 1:
             if az[i] < 0:
                 az[i] = az[i] + np.pi * 2
         else:
             if az < 0:
-                az = az + np.pi * 2
-    aer = np.stack((az, el, sr), axis=0).T
+                az = az + np.pi * 2'''
+    aer = np.array([az, el, sr])
     return aer
 
 
