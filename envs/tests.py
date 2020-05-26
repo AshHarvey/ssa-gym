@@ -27,7 +27,7 @@ test1b_error = distance.euclidean(itrs.cartesian.xyz._to_value(u.m),
                                   gcrs2irts_matrix_b(t, eop) @ xyz1)
 assert test1a_error < 25, print("Failed Test 1: GCRS to ITRS transformation")
 print("Test 1a: GCRS to ITRS (a) error in meters: ", test1a_error)
-print("Test 1b: GCRS to ITRS (b) error in meters: ", test1b_error)
+print("Test 1b: GCRS to ITRS (b) error in kilometers: ", test1b_error)
 
 # !------------ Test 2a - ITRS to LLA
 from envs.transformations import itrs2lla
@@ -262,8 +262,6 @@ ukf.update(z=z, R=R)
 
 Test8a = np.prod((x_post4-ukf.x)) / np.prod(x_post4)
 
-print("A NumbaPerformanceWarning is normal here, it would be nice to resolve, but not necessary")
-
 assert np.abs(Test8a) < 1.0e-10, print("Test 8a: Updated means don't match")
 Test8b = det((P_post4-ukf.P))/det(P_post4)
 assert np.abs(Test8b) < 1.0e-10, print("Test 8b: Updated covariances don't match")
@@ -289,3 +287,130 @@ Test8d = det((P_post4-ukf.P))/det(P_post4)
 assert np.abs(Test8d) < 1.0e-10, print("Test 8d: Updated covariances don't match")
 
 print("Test 8: step 100, update 2 errors: x: ", Test8c, ", P: ", Test8d)
+
+# !------------ Test 9 - Az El Updates
+from envs.transformations import lla2itrs, _itrs2azel
+
+@jit(['float64[:](float64[:],float64[:])'])
+def residual_z(a, b):
+    # prep array to receive results
+    c = np.copy(a)
+    # force angles in range <-pi, pi>
+    while a[0] > np.pi or a[0] < -np.pi:
+        a[0] = a[0] - np.sign(a[0])*np.pi*2
+    while a[1] > np.pi or a[1] < -np.pi:
+        a[1] = a[1] - np.sign(a[1])*np.pi*2
+    # find differ, a - b
+    c[0] = (a[0] - b[0] + np.pi) % (np.pi*2) - np.pi
+    c[1] = (a[1] - b[1] + np.pi) % (np.pi*2) - np.pi
+    c[2] = np.subtract(a[2], b[2])
+    return c
+
+@njit
+def mean_z(sigmas, Wm):
+    z = np.zeros(3)
+    sum_sin_az, sum_cos_az, sum_sin_el, sum_cos_el = 0., 0., 0., 0.
+
+    Wm = Wm/np.sum(Wm)
+
+    for i in range(len(sigmas)):
+        s = sigmas[i]
+        sum_sin_az = sum_sin_az + np.sin(s[0])*Wm[i]
+        sum_cos_az = sum_cos_az + np.cos(s[0])*Wm[i]
+        sum_sin_el = sum_sin_el + np.sin(s[1])*Wm[i]
+        sum_cos_el = sum_cos_el + np.cos(s[1])*Wm[i]
+        z[2] = z[2] + s[2] * Wm[i]
+    z[0] = np.arctan2(sum_sin_az, sum_cos_az)
+    z[1] = np.arctan2(sum_sin_el, sum_cos_el)
+    return z
+
+observer_lat = np.radians(38.828198)
+observer_lon = np.radians(-77.305352)
+observer_alt = np.float64(20.0) # in meters
+observer_lla = np.array((observer_lon, observer_lat, observer_alt))
+observer_itrs = lla2itrs(observer_lla)/1000 # meter -> kilometers
+
+@njit
+def hx(x_gcrs, trans_matrix, obs=observer_itrs):
+    # measurement function - convert state into a measurement
+    # where measurements are [azimuth, elevation]
+    x_itrs = trans_matrix @ x_gcrs[:3]
+    aer = _itrs2azel(observer_itrs, x_itrs)
+    return aer
+
+def hx2(x, t, obs_lat=observer_lat, obs_lon=observer_lon, obs_height=observer_alt):
+    # measurement function - convert state into a measurement
+    # where measurements are [azimuth, elevation]
+    object = SkyCoord(x=x[0] * u.km, y=x[1] * u.km, z=x[2] * u.km, frame='gcrs',
+                   representation_type='cartesian', obstime=t)
+    obs = EarthLocation.from_geodetic(lon=obs_lon*u.rad, lat=obs_lat*u.rad, height=obs_height*u.m)
+    AltAz_frame = AltAz(obstime=t, location=obs)
+    results = object.transform_to(AltAz_frame)
+
+    az = results.az.to_value(u.rad)
+    alt = results.alt.to_value(u.rad)
+    sr = results.distance.to_value(u.km)
+    aer = np.array([az, alt, sr])
+    return aer
+
+t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
+
+trans_matrix = gcrs2irts_matrix_a(t, eop)
+
+ini = _itrs2azel(observer_itrs, x[:3]) # since _itrs2azel is used inside hx, it must be compiled prior to hx
+
+z1 = hx(x, trans_matrix, obs=observer_itrs)
+
+z2 = hx2(x, t, obs_lat=observer_lat, obs_lon=observer_lon, obs_height=observer_alt)
+
+hx_error = z2 - z1
+
+print("Test 9a: hx error in azimuth (arc seconds) = ", np.degrees(hx_error[0])*60*60)
+print("Test 9b: hx error in elevation (arc seconds) = ", np.degrees(hx_error[1])*60*60)
+print("Test 9c: hx error in slant range (meters) = ", np.degrees(hx_error[2])*1000)
+print("I am unsure if these error are mine or AstroPy's given the above matched")
+
+t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
+t = [t]
+for i in range(500):
+    t.append(t[-1] + timedelta(seconds=30))
+trans_matrix = gcrs2irts_matrix_a(t, eop)
+
+R = np.array([np.radians(1/60/60),np.radians(1/60/60),1.0])
+
+sigmas_h = np.copy(ukf.sigmas_h)
+for i in range(13):
+    sigmas_h[i] = hx(sigmas_h[i], trans_matrix[0], obs=observer_itrs)
+
+ini = mean_z(sigmas_h, Wm) # since mean_z is used inside update, it must be compiled prior to update
+ini = residual_z(sigmas_h[2],sigmas_h[4]) # since mean_z is used inside update, it must be compiled prior to update
+
+from envs.filter import update
+"""
+for i in range(50):
+    for j in range(10):
+        x_post4, P_post4, sigmas_post4 = predict(x_post4, P_post4, Wm, Wc, Q, dt, lambda_, fx)
+        x_true = fx(x_true, dt)
+    run = i*10 + j
+    z = hx(x_true[:3], trans_matrix[run], obs=observer_itrs)
+    x_post4, P_post4 = update(x_post4, P_post4, z, Wm, Wc, R, sigmas_post4, hx, mean_z = mean_z, residual_z = residual_z)
+
+for i in range(50):
+    x_true = fx(x_true, dt)
+
+z = hx(x_true[:3], trans_matrix, obs=observer_itrs)
+
+x_post4, P_post4 = update(x_post4, P_post4, z, Wm, Wc, R, sigmas_post4, hx)
+
+ukf.update(z=z, R=R)
+"""
+"""
+def wrapped():
+    mean_z(sigmas_h, Wm)
+
+import timeit
+
+timeit.timeit(wrapped, number=2880)
+"""
+
+print("Done")
