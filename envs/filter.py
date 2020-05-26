@@ -1,4 +1,4 @@
-from numba import njit
+from numba import njit, jit
 import numpy as np
 from scipy.linalg import block_diag, cholesky
 from poliastro.core.propagation import markley
@@ -15,29 +15,28 @@ def hx(x):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
     return x[:3]
-    
-#@jit('f8[:](f8[:],f8[:])', nopython=True)
-@njit
+'''
+
+@jit('f8[::1](f8[::1],f8[::1])', nopython=True)
 def residual_x(a,b):
     c = np.subtract(a,b)
     return c
 
-#@jit('f8[:](f8[:],f8[:])', nopython=True)
-@njit
+@jit('f8[::1](f8[::1],f8[::1])', nopython=True)
 def residual_z(a,b):
     c = np.subtract(a,b)
     return c
 
-@njit
-def mean_x(x):
-    x_mean = np.mean(x)
+@jit('f8[::1](f8[::1],f8[:,::1])', nopython=True)
+def mean_x(Wm, sigmas):
+    x_mean = np.dot(Wm, sigmas)
     return x_mean
 
-@njit
-def mean_z(z):
-    z_mean = np.mean(z)
+@jit('f8[::1](f8[::1],f8[:,::1])', nopython=True)
+def mean_z(Wm, sigmas):
+    z_mean = np.dot(Wm, sigmas)
     return z_mean
-'''
+
 
 @njit
 def compute_filter_weights(alpha, beta, kappa, n):
@@ -152,7 +151,7 @@ def Q_discrete_white_noise(dim, dt=1., var=1., block_size=1, order_by_dim=True):
     return order_by_derivative(np.array(Q), dim, block_size) * var
 
 @njit
-def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=np.dot, residual_fn=np.subtract):
+def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=mean_x, residual_fn=residual_x):
     r"""
     Computes unscented transform of a set of sigma points and weights.
     returns the mean and covariance in a tuple.
@@ -233,17 +232,23 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=np.dot, residual_fn=n
 
 
     # compute residuals
-    y = residual_fn(sigmas, x.T)
+    y = np.copy(sigmas)
+    for i in range(kmax):
+        y[i] = residual_fn(sigmas[i], x)
     # P = np.dot(y.T, np.dot(np.diag(Wc), y))
 
     # P = Wc @ y @ y.T
 
     if residual_fn is np.subtract or residual_fn is None:
-        y = residual_fn(sigmas, x.T)
+        y = np.copy(sigmas)
+        for i in range(kmax):
+            y[i] = residual_fn(sigmas[i], x)
         P = np.dot(y.T, np.dot(np.diag(Wc), y))
     else:
         P = np.zeros((n, n))
-        y = residual_fn(sigmas, x)
+        y = np.copy(sigmas)
+        for i in range(kmax):
+            y[i] = residual_fn(sigmas[i], x)
         for k in range(kmax):
             P = P + Wc[k] * np.outer(y[k], y[k])
 
@@ -309,7 +314,7 @@ def sigma_points(x, P, lambda_, n):
 
 #@jit('f8[:,:](f8[:],f8[:],f8[:,:],f8[:,:],f8[:])', nopython=True)
 @njit
-def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = np.subtract, residual_z = np.subtract):
+def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = residual_x, residual_z = residual_z):
     """
     Compute cross variance of the state `x` and measurement `z`.
     """
@@ -325,8 +330,8 @@ def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = np.subtract, resid
 
 #@jit('[f8[:],f8[:,:],f8[:,:]](f8[:],f8[:,:],f8[:,:],f8[:],f8[:],f8[:,:],f8,i8)', nopython=True)
 @njit
-def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = np.dot, residual_x = np.subtract):
-        r"""
+def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = mean_x, residual_x = residual_x):
+        """
         Performs the predict step of the UKF. On return, self.x and
         self.P contain the predicted state (x) and covariance (P). '
         Important: this MUST be called before update() is called for the first
@@ -369,7 +374,7 @@ def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = np.dot, residual_x = np.s
 
 
 @njit
-def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = np.subtract, mean_z = np.dot, residual_z = np.subtract):
+def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = mean_z, residual_z = residual_z):
     """
     Update the UKF with the given measurements. On return,
     self.x and self.P contain the new mean and covariance of the filter.
@@ -409,7 +414,7 @@ def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = np.subtract, mean_z = 
     Pxz = cross_variance(x = x, z = zp, sigmas_f = sigmas_f, sigmas_h = sigmas_h, Wc = Wc, residual_x = residual_x,
                          residual_z = residual_z)
 
-    SI = np.linalg.inv(S)
+    SI = np.copy(np.linalg.inv(S)) # copy resolves numba performance warning
     K = np.dot(Pxz, SI)        # Kalman gain
     y = residual_z(z, zp)   # residual
 
