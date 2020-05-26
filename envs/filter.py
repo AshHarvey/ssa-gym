@@ -3,7 +3,7 @@ import numpy as np
 from scipy.linalg import block_diag, cholesky
 from poliastro.core.propagation import markley
 
-
+'''
 @njit
 def fx(x,dt):
     x = markley(398600.4418,x[:3],x[3:],dt) #  # (km^3 / s^2), (km), (km/s), (s)
@@ -15,6 +15,29 @@ def hx(x):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
     return x[:3]
+    
+#@jit('f8[:](f8[:],f8[:])', nopython=True)
+@njit
+def residual_x(a,b):
+    c = np.subtract(a,b)
+    return c
+
+#@jit('f8[:](f8[:],f8[:])', nopython=True)
+@njit
+def residual_z(a,b):
+    c = np.subtract(a,b)
+    return c
+
+@njit
+def mean_x(x):
+    x_mean = np.mean(x)
+    return x_mean
+
+@njit
+def mean_z(z):
+    z_mean = np.mean(z)
+    return z_mean
+'''
 
 @njit
 def compute_filter_weights(alpha, beta, kappa, n):
@@ -129,7 +152,7 @@ def Q_discrete_white_noise(dim, dt=1., var=1., block_size=1, order_by_dim=True):
     return order_by_derivative(np.array(Q), dim, block_size) * var
 
 @njit
-def unscented_transform(sigmas, Wm, Wc, noise_cov):
+def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=np.dot, residual_fn=np.subtract):
     r"""
     Computes unscented transform of a set of sigma points and weights.
     returns the mean and covariance in a tuple.
@@ -184,15 +207,15 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov):
     https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python
     """
 
-    #kmax, n = sigmas.shape
+    kmax, n = sigmas.shape
 
     # x = np.dot(Wm, sigmas) # x = np.dot(Wm, sigmas)
     # x = np.average(sigmas,0,Wm)
-    weight = Wm/np.sum(Wm)
-    x = np.copy(sigmas[0])
-    n = len(x)
-    for i in range(n):
-        x[i] = np.sum(sigmas[:, i]*weight)
+
+    # normalize weights for mean
+    Wm = Wm/np.sum(Wm)
+
+    x = mean_fn(Wm, sigmas)
 
     # new covariance is the sum of the outer product of the residuals
     # times the weights
@@ -210,15 +233,21 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov):
 
 
     # compute residuals
-    y = sigmas - x.T
+    y = residual_fn(sigmas, x.T)
     # P = np.dot(y.T, np.dot(np.diag(Wc), y))
-    P = np.dot(np.diag(Wc), y).T @ y
+
     # P = Wc @ y @ y.T
 
-    '''    P2 = np.zeros((6, 6))
-    for k in range(13):
-        y2 = np.subtract(sigmas[k], x)
-        P2 += Wc[k] * np.outer(y2, y2)'''
+    if residual_fn is np.subtract or residual_fn is None:
+        y = residual_fn(sigmas, x.T)
+        P = np.dot(y.T, np.dot(np.diag(Wc), y))
+    else:
+        P = np.zeros((n, n))
+        y = residual_fn(sigmas, x)
+        for k in range(kmax):
+            P = P + Wc[k] * np.outer(y[k], y[k])
+
+    # P = np.dot(np.diag(Wc), y).T @ y
 
     P = P + noise_cov
 
@@ -280,7 +309,7 @@ def sigma_points(x, P, lambda_, n):
 
 #@jit('f8[:,:](f8[:],f8[:],f8[:,:],f8[:,:],f8[:])', nopython=True)
 @njit
-def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_z=np.subtract):
+def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = np.subtract, residual_z = np.subtract):
     """
     Compute cross variance of the state `x` and measurement `z`.
     """
@@ -293,31 +322,10 @@ def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_z=np.subtract):
         Pxz += Wc[i] * np.outer(dx, dz)
     return Pxz
 
-#@jit('f8[:](f8[:],f8[:])', nopython=True)
-@njit
-def residual_x(a,b):
-    c = np.subtract(a,b)
-    return c
-
-#@jit('f8[:](f8[:],f8[:])', nopython=True)
-@njit
-def residual_z(a,b):
-    c = np.subtract(a,b)
-    return c
-
-@njit
-def mean_x(x):
-    x_mean = np.mean(x)
-    return x_mean
-
-@njit
-def mean_z(z):
-    z_mean = np.mean(z)
-    return z_mean
 
 #@jit('[f8[:],f8[:,:],f8[:,:]](f8[:],f8[:,:],f8[:,:],f8[:],f8[:],f8[:,:],f8,i8)', nopython=True)
 @njit
-def predict(x, P, Wm, Wc, Q, dt, lambda_, fx):
+def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = np.dot, residual_x = np.subtract):
         r"""
         Performs the predict step of the UKF. On return, self.x and
         self.P contain the predicted state (x) and covariance (P). '
@@ -354,13 +362,14 @@ def predict(x, P, Wm, Wc, Q, dt, lambda_, fx):
         #and pass sigmas through the unscented transform to compute prior
         #x, P = unscented_transform(sigmas=sigmas_f, Wm=Wm, Wc=Wc, noise_cov=Q,
         #                           mean_fn=x_mean, residual_fn=residual_x)
-        x, P = unscented_transform(sigmas=sigmas, Wm=Wm, Wc=Wc, noise_cov=Q)
+        x, P = unscented_transform(sigmas=sigmas, Wm=Wm, Wc=Wc, noise_cov=Q,
+                                   mean_fn=mean_x, residual_fn=residual_x)
 
         return x, P, sigmas
 
 
 @njit
-def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_z=np.subtract):
+def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = np.subtract, mean_z = np.dot, residual_z = np.subtract):
     """
     Update the UKF with the given measurements. On return,
     self.x and self.P contain the new mean and covariance of the filter.
@@ -393,10 +402,12 @@ def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_z=np.subtract):
 
     # mean and covariance of prediction passed through unscented transform
     #zp, S = unscented_transform(sigmas_h, Wm, Wc, R, z_mean, residual_z) # S = system uncertainty
-    zp, S = unscented_transform(sigmas_h, Wm, Wc, R) # S = system uncertainty
+    zp, S = unscented_transform(sigmas=sigmas_h, Wm=Wm, Wc=Wc, noise_cov=R,
+                                mean_fn=mean_z, residual_fn=residual_z) # S = system uncertainty
 
     # compute cross variance of the state and the measurements
-    Pxz = cross_variance(x, zp, sigmas_f, sigmas_h, Wc, residual_z)
+    Pxz = cross_variance(x = x, z = zp, sigmas_f = sigmas_f, sigmas_h = sigmas_h, Wc = Wc, residual_x = residual_x,
+                         residual_z = residual_z)
 
     SI = np.linalg.inv(S)
     K = np.dot(Pxz, SI)        # Kalman gain
