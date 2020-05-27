@@ -374,7 +374,7 @@ def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = mean_x, residual_x = resi
 
 
 @njit
-def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = mean_z, residual_z = residual_z):
+def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = mean_z, residual_z = residual_z, *hx_args):
     """
     Update the UKF with the given measurements. On return,
     self.x and self.P contain the new mean and covariance of the filter.
@@ -403,7 +403,7 @@ def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = m
 
     sigmas_h = np.zeros((dim_sigmas, dim_z), np.float64)
     for i in range(dim_sigmas):
-        sigmas_h[i] = hx(sigmas_f[i])
+        sigmas_h[i] = hx(sigmas_f[i], *hx_args)
 
     # mean and covariance of prediction passed through unscented transform
     #zp, S = unscented_transform(sigmas_h, Wm, Wc, R, z_mean, residual_z) # S = system uncertainty
