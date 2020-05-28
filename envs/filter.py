@@ -27,13 +27,13 @@ def residual_z(a,b):
     c = np.subtract(a,b)
     return c
 
-@jit('f8[::1](f8[::1],f8[:,::1])', nopython=True)
-def mean_x(Wm, sigmas):
+@jit('f8[::1](f8[:,::1], f8[::1])', nopython=True)
+def mean_x(sigmas, Wm):
     x_mean = np.dot(Wm, sigmas)
     return x_mean
 
-@jit('f8[::1](f8[::1],f8[:,::1])', nopython=True)
-def mean_z(Wm, sigmas):
+@jit('f8[::1](f8[:,::1], f8[::1])', nopython=True)
+def mean_z(sigmas, Wm):
     z_mean = np.dot(Wm, sigmas)
     return z_mean
 
@@ -214,7 +214,7 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=mean_x, residual_fn=r
     # normalize weights for mean
     Wm = Wm/np.sum(Wm)
 
-    x = mean_fn(Wm, sigmas)
+    x = mean_fn(sigmas, Wm)
 
     # new covariance is the sum of the outer product of the residuals
     # times the weights

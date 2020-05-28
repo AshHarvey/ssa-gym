@@ -33,6 +33,16 @@ def hx_aer_erfa(x_gcrs, *hx_args):
     return aer
 
 
+def hx_aer_kwargs(x_gcrs, **kwargs):
+    # measurement function - convert state into a measurement
+    # where measurements are [azimuth, elevation]
+    trans_matrix = kwargs["trans_matrix"]
+    observer_itrs = kwargs["observer_itrs"]
+    x_itrs = trans_matrix @ x_gcrs[:3]
+    aer = _itrs2azel(observer_itrs, x_itrs)
+    return aer
+
+
 def hx_aer_astropy(x, *hx_args):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
@@ -74,7 +84,13 @@ def residual_z_aer(a, b):
 
 
 @njit
-def mean_z_aer(Wm, sigmas):
+def residual_xyz(a, b):
+    c = np.subtract(a,b)
+    return c
+
+
+@njit
+def mean_z_aer(sigmas, Wm):
     z = np.zeros(3)
     sum_sin_az, sum_cos_az, sum_sin_el, sum_cos_el = 0., 0., 0., 0.
 
