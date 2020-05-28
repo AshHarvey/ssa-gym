@@ -437,9 +437,6 @@ print("I am unsure if these errors are mine or AstroPy's given the above matched
       "checks out against AstroPy, but the end to end case has significantly more error... \n"
       "Issue opened with AstroPy at https://github.com/astropy/astropy/issues/10407")
 
-print("Done")
-exit() # remove before flight
-
 # !------------ Test 11 - Az El Updates
 from envs.filter import compute_filter_weights, Q_discrete_white_noise, sigma_points, update, predict
 from filterpy.kalman import MerweScaledSigmaPoints as MerweScaledSigmaPoints_fp
@@ -449,9 +446,10 @@ from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx, hx_aer_kwargs
 from envs.transformations import lla2itrs, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
 from datetime import datetime, timedelta
 import numpy as np
+from scipy.spatial import distance
 
 # Sim Configurable Setting:
-max_step = 50
+max_step = 500
 obs_interval = 10
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
 x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
@@ -514,6 +512,17 @@ for i in range(max_step):
         ukf.update(z_true, **hx_kwargs)
         x_filter, P_filter = update(x_filter, P_filter, z_true, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
 
+test11a_error = [distance.euclidean(ukf.x[:3],x_true[:3]), distance.euclidean(ukf.x[3:],x_true[3:])]
+test11b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean(x_filter[3:],x_true[3:])]
+
+print("Test 11a: step ", max_step, " error after ", int(max_step/obs_interval), " updates (FilterPy): ",
+      np.round(test11a_error[0]*1000,4), " meters, ", np.round(test11a_error[1]*1000,4), " meters per second")
+
+print("Test 11b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter): ",
+      np.round(test11b_error[0]*1000,4), " meters, ", np.round(test11b_error[1]*1000,4), " meters per second")
+
+
+print("Done")
 
 """
 def wrapped():
