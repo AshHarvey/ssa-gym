@@ -507,7 +507,6 @@ for i in range(max_step):
         hx_args = (trans_matrix, observer_itrs)
         hx_kwargs = {"trans_matrix": trans_matrix, "observer_itrs": observer_itrs}
         z_true = hx(x_true, hx_args)
-        z_true = hx_dict(x_true, **hx_kwargs)
         # update FilterPy
         ukf.update(z_true, **hx_kwargs)
         x_filter, P_filter = update(x_filter, P_filter, z_true, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
@@ -521,6 +520,81 @@ print("Test 11a: step ", max_step, " error after ", int(max_step/obs_interval), 
 print("Test 11b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter): ",
       np.round(test11b_error[0]*1000,4), " meters, ", np.round(test11b_error[1]*1000,4), " meters per second")
 
+
+# !------------ Test 12 - Az El Updates with Uncertainty
+# Sim Configurable Setting:
+max_step = 2880
+obs_interval = 10
+observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
+x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
+t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
+eop = get_eops()
+
+# Filter Configurable Settings:
+dim_x = 6
+dim_z = 3
+dt = 30.0
+R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
+Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
+x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
+P = np.diag([100,  100,  100, 0.1, 0.1,  0.1])
+alpha = 0.001
+beta = 2.0
+kappa = 3-6
+
+# Derived Settings:
+lambda_ = alpha**2 * (dim_x + kappa) - dim_x
+points = sigma_points(x, P, lambda_, dim_x)
+points_fp = MerweScaledSigmaPoints_fp(dim_x, alpha, beta, kappa)
+Wc, Wm = compute_filter_weights(alpha, beta, kappa, dim_x)
+x_true = np.copy(x)
+x_filter = np.copy(x) + np.random.normal(0,np.sqrt(np.diag(P)*1000))/1000
+P_filter = np.copy(P)
+t = [t_init]
+step = [0]
+observer_lla = np.array((np.radians(observer[1]), np.radians(observer[0]), observer[2]))
+observer_itrs = lla2itrs(observer_lla)/1000 # meter -> kilometers
+
+# FilterPy Configurable Settings:
+ukf = UnscentedKalmanFilter_pf(dim_x, dim_z, dt, hx_dict, fx, points_fp)
+ukf.x = np.copy(x_filter)
+ukf.P = np.copy(P)
+ukf.Q = np.copy(Q)
+ukf.R = np.copy(R)
+ukf.residual_z = residual_z
+ukf.z_mean = mean_z
+
+# run the filter
+for i in range(max_step):
+    # step truth forward
+    step.append(step[-1] + 1)
+    t.append(t[-1] + timedelta(seconds=dt))
+    x_true = fx(x_true, dt)
+    # step FilterPy forward
+    ukf.predict(dt)
+    # step filter forward
+    x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+    # Check if obs should be taken
+    if step[-1] % obs_interval == 0:
+        # get obs:
+        trans_matrix = gcrs2irts_matrix(t[-1], eop)
+        hx_args = (trans_matrix, observer_itrs)
+        hx_kwargs = {"trans_matrix": trans_matrix, "observer_itrs": observer_itrs}
+        z_true = hx(x_true, hx_args)
+        z_noise = np.random.normal(0, np.sqrt(np.diag(R)*[360*60*60, 360*60*60, 1000]))/[360*60*60, 360*60*60, 1000]
+        z_filter = z_true + z_noise
+        # update FilterPy
+        ukf.update(z_filter, **hx_kwargs)
+        x_filter, P_filter = update(x_filter, P_filter, z_filter, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
+
+test12a_error = [distance.euclidean(ukf.x[:3],x_true[:3]), distance.euclidean(ukf.x[3:],x_true[3:])]
+test12b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean(x_filter[3:],x_true[3:])]
+
+print("Test 12a: step ", max_step, " error after ", int(max_step/obs_interval), " updates (FilterPy with noise): ",
+      np.round(test12a_error[0]*1000,4), " meters, ", np.round(test12a_error[1]*1000,4), " meters per second")
+
+print("Test 12b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter with noise): ",
+      np.round(test12b_error[0]*1000,4), " meters, ", np.round(test12b_error[1]*1000,4), " meters per second")
 
 print("Done")
 
