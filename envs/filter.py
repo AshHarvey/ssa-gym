@@ -1,36 +1,181 @@
-from numba import njit, jit
 import numpy as np
-from scipy.linalg import block_diag, cholesky
-from poliastro.core.propagation import markley
+from numba import njit, jit
+from scipy.linalg import block_diag
 
-'''
-@njit
-def fx(x,dt):
-    x = markley(398600.4418,x[:3],x[3:],dt) #  # (km^3 / s^2), (km), (km/s), (s)
-    x = x.flatten()
-    return x
+"""
+!--------------------- Notes from author
+This is a port of Roger R Labber's FilterPy to work inside a numba compiled set of functions. Please refer to 
+https://filterpy.readthedocs.io/en/latest/kalman/UnscentedKalmanFilter.html for the original implementation
 
-@njit
-def hx(x):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
-    return x[:3]
-'''
+!--------------------- Notes from Roger R Labber's FilterPy
+Implements the Scaled Unscented Kalman filter (UKF) as defined by
+Simon Julier in [1], using the formulation provided by Wan and Merle
+in [2]. This filter scales the sigma points to avoid strong nonlinearities.
+Parameters
+----------
+dim_x : int
+    Number of state variables for the filter. For example, if
+    you are tracking the position and velocity of an object in two
+    dimensions, dim_x would be 4.
+dim_z : int
+    Number of of measurement inputs. For example, if the sensor
+    provides you with position in (x,y), dim_z would be 2.
+    This is for convience, so everything is sized correctly on
+    creation. If you are using multiple sensors the size of `z` can
+    change based on the sensor. Just provide the appropriate hx function
+dt : float
+    Time between steps in seconds.
+hx : function(x)
+    Measurement function. Converts state vector x into a measurement
+    vector of shape (dim_z).
+fx : function(x,dt)
+    function that returns the state x transformed by the
+    state transistion function. dt is the time step in seconds.
+points : class
+    Class which computes the sigma points and weights for a UKF
+    algorithm. You can vary the UKF implementation by changing this
+    class. For example, MerweScaledSigmaPoints implements the alpha,
+    beta, kappa parameterization of Van der Merwe, and
+    JulierSigmaPoints implements Julier's original kappa
+    parameterization. See either of those for the required
+    signature of this class if you want to implement your own.
+sqrt_fn : callable(ndarray), default=None (implies scipy.linalg.cholesky)
+    Defines how we compute the square root of a matrix, which has
+    no unique answer. Cholesky is the default choice due to its
+    speed. Typically your alternative choice will be
+    scipy.linalg.sqrtm. Different choices affect how the sigma points
+    are arranged relative to the eigenvectors of the covariance matrix.
+    Usually this will not matter to you; if so the default cholesky()
+    yields maximal performance. As of van der Merwe's dissertation of
+    2004 [6] this was not a well reseached area so I have no advice
+    to give you.
+    If your method returns a triangular matrix it must be upper
+    triangular. Do not use numpy.linalg.cholesky - for historical
+    reasons it returns a lower triangular matrix. The SciPy version
+    does the right thing as far as this class is concerned.
+x_mean_fn : callable  (sigma_points, weights), optional
+    Function that computes the mean of the provided sigma points
+    and weights. Use this if your state variable contains nonlinear
+    values such as angles which cannot be summed.
+    .. code-block:: Python
+        def state_mean(sigmas, Wm):
+            x = np.zeros(3)
+            sum_sin, sum_cos = 0., 0.
+            for i in range(len(sigmas)):
+                s = sigmas[i]
+                x[0] += s[0] * Wm[i]
+                x[1] += s[1] * Wm[i]
+                sum_sin += sin(s[2])*Wm[i]
+                sum_cos += cos(s[2])*Wm[i]
+            x[2] = atan2(sum_sin, sum_cos)
+            return x
+z_mean_fn : callable  (sigma_points, weights), optional
+    Same as x_mean_fn, except it is called for sigma points which
+    form the measurements after being passed through hx().
+residual_x : callable (x, y), optional
+residual_z : callable (x, y), optional
+    Function that computes the residual (difference) between x and y.
+    You will have to supply this if your state variable cannot support
+    subtraction, such as angles (359-1 degreees is 2, not 358). x and y
+    are state vectors, not scalars. One is for the state variable,
+    the other is for the measurement state.
+    .. code-block:: Python
+        def residual(a, b):
+            y = a[0] - b[0]
+            if y > np.pi:
+                y -= 2*np.pi
+            if y < -np.pi:
+                y = 2*np.pi
+            return y
+Attributes
+----------
+x : numpy.array(dim_x)
+    state estimate vector
+P : numpy.array(dim_x, dim_x)
+    covariance estimate matrix
+x_prior : numpy.array(dim_x)
+    Prior (predicted) state estimate. The *_prior and *_post attributes
+    are for convienence; they store the  prior and posterior of the
+    current epoch. Read Only.
+P_prior : numpy.array(dim_x, dim_x)
+    Prior (predicted) state covariance matrix. Read Only.
+x_post : numpy.array(dim_x)
+    Posterior (updated) state estimate. Read Only.
+P_post : numpy.array(dim_x, dim_x)
+    Posterior (updated) state covariance matrix. Read Only.
+z : ndarray
+    Last measurement used in update(). Read only.
+R : numpy.array(dim_z, dim_z)
+    measurement noise matrix
+Q : numpy.array(dim_x, dim_x)
+    process noise matrix
+K : numpy.array
+    Kalman gain
+y : numpy.array
+    innovation residual
+log_likelihood : scalar
+    Log likelihood of last measurement update.
+likelihood : float
+    likelihood of last measurment. Read only.
+    Computed from the log-likelihood. The log-likelihood can be very
+    small,  meaning a large negative value such as -28000. Taking the
+    exp() of that results in 0.0, which can break typical algorithms
+    which multiply by this value, so by default we always return a
+    number >= sys.float_info.min.
+mahalanobis : float
+    mahalanobis distance of the measurement. Read only.
+inv : function, default numpy.linalg.inv
+    If you prefer another inverse function, such as the Moore-Penrose
+    pseudo inverse, set it to that instead:
+    .. code-block:: Python
+        kf.inv = np.linalg.pinv
+
+For in depth explanations see my book Kalman and Bayesian Filters in Python
+https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python
+Also see the filterpy/kalman/tests subdirectory for test code that
+may be illuminating.
+References
+----------
+.. [1] Julier, Simon J. "The scaled unscented transformation,"
+    American Control Converence, 2002, pp 4555-4559, vol 6.
+    Online copy:
+    https://www.cs.unc.edu/~welch/kalman/media/pdf/ACC02-IEEE1357.PDF
+.. [2] E. A. Wan and R. Van der Merwe, “The unscented Kalman filter for
+    nonlinear estimation,” in Proc. Symp. Adaptive Syst. Signal
+    Process., Commun. Contr., Lake Louise, AB, Canada, Oct. 2000.
+    Online Copy:
+    https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
+.. [3] S. Julier, J. Uhlmann, and H. Durrant-Whyte. "A new method for
+       the nonlinear transformation of means and covariances in filters
+       and estimators," IEEE Transactions on Automatic Control, 45(3),
+       pp. 477-482 (March 2000).
+.. [4] E. A. Wan and R. Van der Merwe, “The Unscented Kalman filter for
+       Nonlinear Estimation,” in Proc. Symp. Adaptive Syst. Signal
+       Process., Commun. Contr., Lake Louise, AB, Canada, Oct. 2000.
+       https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
+.. [5] Wan, Merle "The Unscented Kalman Filter," chapter in *Kalman
+       Filtering and Neural Networks*, John Wiley & Sons, Inc., 2001.
+.. [6] R. Van der Merwe "Sigma-Point Kalman Filters for Probabilitic
+       Inference in Dynamic State-Space Models" (Doctoral dissertation)
+"""
 
 @jit('f8[::1](f8[::1],f8[::1])', nopython=True)
 def residual_x(a,b):
     c = np.subtract(a,b)
     return c
 
+
 @jit('f8[::1](f8[::1],f8[::1])', nopython=True)
 def residual_z(a,b):
     c = np.subtract(a,b)
     return c
 
+
 @jit('f8[::1](f8[:,::1], f8[::1])', nopython=True)
 def mean_x(sigmas, Wm):
     x_mean = np.dot(Wm, sigmas)
     return x_mean
+
 
 @jit('f8[::1](f8[:,::1], f8[::1])', nopython=True)
 def mean_z(sigmas, Wm):
@@ -40,9 +185,7 @@ def mean_z(sigmas, Wm):
 
 @njit
 def compute_filter_weights(alpha, beta, kappa, n):
-    """ Computes the weights for the scaled unscented Kalman filter.
-    """
-
+    # Computes the weights for the scaled unscented Kalman filter.
     n = n
     lambda_ = alpha**2 * (n +kappa) - n
 
@@ -52,6 +195,7 @@ def compute_filter_weights(alpha, beta, kappa, n):
     Wc[0] = lambda_ / (n + lambda_) + (1 - alpha**2 + beta)
     Wm[0] = lambda_ / (n + lambda_)
     return Wm, Wc
+
 
 # no jit
 def order_by_derivative(Q, dim, block_size):
@@ -85,9 +229,9 @@ def order_by_derivative(Q, dim, block_size):
 
     return D
 
+
 # no jit
 def Q_discrete_white_noise(dim, dt=1., var=1., block_size=1, order_by_dim=True):
-
     """
     Returns the Q matrix for the Discrete Constant White Noise
     Model. dim may be either 2, 3, or 4 dt is the time step, and sigma
@@ -116,8 +260,8 @@ def Q_discrete_white_noise(dim, dt=1., var=1., block_size=1, order_by_dim=True):
         [x y z x' y' z' x'' y'' z'']
     Examples
     --------
-    >>> # constant velocity model in a 3D world with a 10 Hz update rate
-    >>> Q_discrete_white_noise(2, dt=0.1, var=1., block_size=3)
+    # constant velocity model in a 3D world with a 10 Hz update rate
+    # Q_discrete_white_noise(2, dt=0.1, var=1., block_size=3)
     array([[0.000025, 0.0005  , 0.      , 0.      , 0.      , 0.      ],
            [0.0005  , 0.01    , 0.      , 0.      , 0.      , 0.      ],
            [0.      , 0.      , 0.000025, 0.0005  , 0.      , 0.      ],
@@ -135,24 +279,25 @@ def Q_discrete_white_noise(dim, dt=1., var=1., block_size=1, order_by_dim=True):
 
     if dim == 2:
         Q = [[.25*dt**4, .5*dt**3],
-             [ .5*dt**3,    dt**2]]
+             [.5*dt**3,    dt**2]]
     elif dim == 3:
         Q = [[.25*dt**4, .5*dt**3, .5*dt**2],
-             [ .5*dt**3,    dt**2,       dt],
-             [ .5*dt**2,       dt,        1]]
+             [.5*dt**3,    dt**2,       dt],
+             [.5*dt**2,       dt,        1]]
     else:
         Q = [[(dt**6)/36, (dt**5)/12, (dt**4)/6, (dt**3)/6],
              [(dt**5)/12, (dt**4)/4,  (dt**3)/2, (dt**2)/2],
              [(dt**4)/6,  (dt**3)/2,   dt**2,     dt],
-             [(dt**3)/6,  (dt**2)/2 ,  dt,        1.]]
+             [(dt**3)/6,  (dt**2)/2,  dt,        1.]]
 
     if order_by_dim:
         return block_diag(*[Q]*block_size) * var
     return order_by_derivative(np.array(Q), dim, block_size) * var
 
+
 @njit
 def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=mean_x, residual_fn=residual_x):
-    r"""
+    """
     Computes unscented transform of a set of sigma points and weights.
     returns the mean and covariance in a tuple.
     This works in conjunction with the UnscentedKalmanFilter class.
@@ -199,7 +344,7 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=mean_x, residual_fn=r
     x : ndarray [dimension]
         Mean of the sigma points after passing through the transform.
     P : ndarray
-        covariance of the sigma points after passing throgh the transform.
+        covariance of the sigma points after passing through the transform.
     Examples
     --------
     See my book Kalman and Bayesian Filters in Python
@@ -260,7 +405,8 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov, mean_fn=mean_x, residual_fn=r
 
 @njit
 def sigma_points(x, P, lambda_, n):
-    """ Computes the sigma points for an unscented Kalman filter
+    """
+    Computes the sigma points for an unscented Kalman filter
     given the mean (x) and covariance(P) of the filter.
     Returns tuple of the sigma points and weights.
     Works with both scalar and array inputs:
@@ -280,45 +426,19 @@ def sigma_points(x, P, lambda_, n):
         the sigmas for one dimension in the problem space.
         Ordered by Xi_0, Xi_{1..n}, Xi_{n+1..2n}
     """
-    """
-    print("##########################")
-    print(x)
-    print("*"*100)
-    print(P)
-    print("*"*100)
-    print(lambda_)
-    print("*"*100)
-    print(n)
-    print("$"*100)
-    """
-
-    #print("LAMBDA")
-    #print(lambda_)
-
-
-    #U = cholesky((lambda_ + n)*P)
     U = np.linalg.cholesky((lambda_ + n)*P).T
-    #print("U")
-    #print(U)
     sigmas = np.zeros((2*n+1, n))
     sigmas[0] = x
     for k in range(n):
-        # pylint: disable=bad-whitespace
-        sigmas[k+1]   = np.subtract(x, -U[k])
+        sigmas[k+1] = np.subtract(x, -U[k])
         sigmas[n+k+1] = np.subtract(x, U[k])
-
-    #print("SIGMAS IN sigma_points FUNC")
-    #print(sigmas)
-
     return sigmas
 
-#@jit('f8[:,:](f8[:],f8[:],f8[:,:],f8[:,:],f8[:])', nopython=True)
 @njit
 def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = residual_x, residual_z = residual_z):
     """
     Compute cross variance of the state `x` and measurement `z`.
     """
-
     Pxz = np.zeros((sigmas_f.shape[1], sigmas_h.shape[1]))
     N = sigmas_f.shape[0]
     for i in range(N):
@@ -328,7 +448,6 @@ def cross_variance(x, z, sigmas_f, sigmas_h, Wc, residual_x = residual_x, residu
     return Pxz
 
 
-#@jit('[f8[:],f8[:,:],f8[:,:]](f8[:],f8[:,:],f8[:,:],f8[:],f8[:],f8[:,:],f8,i8)', nopython=True)
 @njit
 def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = mean_x, residual_x = residual_x):
         """
@@ -353,23 +472,12 @@ def predict(x, P, Wm, Wc, Q, dt, lambda_, fx, mean_x = mean_x, residual_x = resi
             optional keyword arguments to be passed into f(x).
         """
         dim_x = len(x)
-
         sigmas = sigma_points(x, P, lambda_, dim_x)
-
-        #print("SIGMAS IN PREDICT")
-        #print(sigmas)
-
         n = len(sigmas)
-
         for i in range(n):
             sigmas[i] = fx(sigmas[i], dt)
-
-        #and pass sigmas through the unscented transform to compute prior
-        #x, P = unscented_transform(sigmas=sigmas_f, Wm=Wm, Wc=Wc, noise_cov=Q,
-        #                           mean_fn=x_mean, residual_fn=residual_x)
         x, P = unscented_transform(sigmas=sigmas, Wm=Wm, Wc=Wc, noise_cov=Q,
                                    mean_fn=mean_x, residual_fn=residual_x)
-
         return x, P, sigmas
 
 
@@ -406,13 +514,12 @@ def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = m
         sigmas_h[i] = hx(sigmas_f[i], *hx_args)
 
     # mean and covariance of prediction passed through unscented transform
-    #zp, S = unscented_transform(sigmas_h, Wm, Wc, R, z_mean, residual_z) # S = system uncertainty
     zp, S = unscented_transform(sigmas=sigmas_h, Wm=Wm, Wc=Wc, noise_cov=R,
                                 mean_fn=mean_z, residual_fn=residual_z) # S = system uncertainty
 
     # compute cross variance of the state and the measurements
-    Pxz = cross_variance(x = x, z = zp, sigmas_f = sigmas_f, sigmas_h = sigmas_h, Wc = Wc, residual_x = residual_x,
-                         residual_z = residual_z)
+    Pxz = cross_variance(x=x, z=zp, sigmas_f=sigmas_f, sigmas_h=sigmas_h, Wc=Wc, residual_x=residual_x,
+                         residual_z=residual_z)
 
     SI = np.copy(np.linalg.inv(S)) # copy resolves numba performance warning
     K = np.dot(Pxz, SI)        # Kalman gain
@@ -423,231 +530,3 @@ def update(x, P, z, Wm, Wc, R, sigmas_f, hx, residual_x = residual_x, mean_z = m
     P = P - np.dot(K, np.dot(S, K.T))
 
     return x, P
-
-"""
-    Implements the Scaled Unscented Kalman filter (UKF) as defined by
-    Simon Julier in [1], using the formulation provided by Wan and Merle
-    in [2]. This filter scales the sigma points to avoid strong nonlinearities.
-    Parameters
-    ----------
-    dim_x : int
-        Number of state variables for the filter. For example, if
-        you are tracking the position and velocity of an object in two
-        dimensions, dim_x would be 4.
-    dim_z : int
-        Number of of measurement inputs. For example, if the sensor
-        provides you with position in (x,y), dim_z would be 2.
-        This is for convience, so everything is sized correctly on
-        creation. If you are using multiple sensors the size of `z` can
-        change based on the sensor. Just provide the appropriate hx function
-    dt : float
-        Time between steps in seconds.
-    hx : function(x)
-        Measurement function. Converts state vector x into a measurement
-        vector of shape (dim_z).
-    fx : function(x,dt)
-        function that returns the state x transformed by the
-        state transistion function. dt is the time step in seconds.
-    points : class
-        Class which computes the sigma points and weights for a UKF
-        algorithm. You can vary the UKF implementation by changing this
-        class. For example, MerweScaledSigmaPoints implements the alpha,
-        beta, kappa parameterization of Van der Merwe, and
-        JulierSigmaPoints implements Julier's original kappa
-        parameterization. See either of those for the required
-        signature of this class if you want to implement your own.
-    sqrt_fn : callable(ndarray), default=None (implies scipy.linalg.cholesky)
-        Defines how we compute the square root of a matrix, which has
-        no unique answer. Cholesky is the default choice due to its
-        speed. Typically your alternative choice will be
-        scipy.linalg.sqrtm. Different choices affect how the sigma points
-        are arranged relative to the eigenvectors of the covariance matrix.
-        Usually this will not matter to you; if so the default cholesky()
-        yields maximal performance. As of van der Merwe's dissertation of
-        2004 [6] this was not a well reseached area so I have no advice
-        to give you.
-        If your method returns a triangular matrix it must be upper
-        triangular. Do not use numpy.linalg.cholesky - for historical
-        reasons it returns a lower triangular matrix. The SciPy version
-        does the right thing as far as this class is concerned.
-    x_mean_fn : callable  (sigma_points, weights), optional
-        Function that computes the mean of the provided sigma points
-        and weights. Use this if your state variable contains nonlinear
-        values such as angles which cannot be summed.
-        .. code-block:: Python
-            def state_mean(sigmas, Wm):
-                x = np.zeros(3)
-                sum_sin, sum_cos = 0., 0.
-                for i in range(len(sigmas)):
-                    s = sigmas[i]
-                    x[0] += s[0] * Wm[i]
-                    x[1] += s[1] * Wm[i]
-                    sum_sin += sin(s[2])*Wm[i]
-                    sum_cos += cos(s[2])*Wm[i]
-                x[2] = atan2(sum_sin, sum_cos)
-                return x
-    z_mean_fn : callable  (sigma_points, weights), optional
-        Same as x_mean_fn, except it is called for sigma points which
-        form the measurements after being passed through hx().
-    residual_x : callable (x, y), optional
-    residual_z : callable (x, y), optional
-        Function that computes the residual (difference) between x and y.
-        You will have to supply this if your state variable cannot support
-        subtraction, such as angles (359-1 degreees is 2, not 358). x and y
-        are state vectors, not scalars. One is for the state variable,
-        the other is for the measurement state.
-        .. code-block:: Python
-            def residual(a, b):
-                y = a[0] - b[0]
-                if y > np.pi:
-                    y -= 2*np.pi
-                if y < -np.pi:
-                    y = 2*np.pi
-                return y
-    Attributes
-    ----------
-    x : numpy.array(dim_x)
-        state estimate vector
-    P : numpy.array(dim_x, dim_x)
-        covariance estimate matrix
-    x_prior : numpy.array(dim_x)
-        Prior (predicted) state estimate. The *_prior and *_post attributes
-        are for convienence; they store the  prior and posterior of the
-        current epoch. Read Only.
-    P_prior : numpy.array(dim_x, dim_x)
-        Prior (predicted) state covariance matrix. Read Only.
-    x_post : numpy.array(dim_x)
-        Posterior (updated) state estimate. Read Only.
-    P_post : numpy.array(dim_x, dim_x)
-        Posterior (updated) state covariance matrix. Read Only.
-    z : ndarray
-        Last measurement used in update(). Read only.
-    R : numpy.array(dim_z, dim_z)
-        measurement noise matrix
-    Q : numpy.array(dim_x, dim_x)
-        process noise matrix
-    K : numpy.array
-        Kalman gain
-    y : numpy.array
-        innovation residual
-    log_likelihood : scalar
-        Log likelihood of last measurement update.
-    likelihood : float
-        likelihood of last measurment. Read only.
-        Computed from the log-likelihood. The log-likelihood can be very
-        small,  meaning a large negative value such as -28000. Taking the
-        exp() of that results in 0.0, which can break typical algorithms
-        which multiply by this value, so by default we always return a
-        number >= sys.float_info.min.
-    mahalanobis : float
-        mahalanobis distance of the measurement. Read only.
-    inv : function, default numpy.linalg.inv
-        If you prefer another inverse function, such as the Moore-Penrose
-        pseudo inverse, set it to that instead:
-        .. code-block:: Python
-            kf.inv = np.linalg.pinv
-
-    For in depth explanations see my book Kalman and Bayesian Filters in Python
-    https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python
-    Also see the filterpy/kalman/tests subdirectory for test code that
-    may be illuminating.
-    References
-    ----------
-    .. [1] Julier, Simon J. "The scaled unscented transformation,"
-        American Control Converence, 2002, pp 4555-4559, vol 6.
-        Online copy:
-        https://www.cs.unc.edu/~welch/kalman/media/pdf/ACC02-IEEE1357.PDF
-    .. [2] E. A. Wan and R. Van der Merwe, “The unscented Kalman filter for
-        nonlinear estimation,” in Proc. Symp. Adaptive Syst. Signal
-        Process., Commun. Contr., Lake Louise, AB, Canada, Oct. 2000.
-        Online Copy:
-        https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
-    .. [3] S. Julier, J. Uhlmann, and H. Durrant-Whyte. "A new method for
-           the nonlinear transformation of means and covariances in filters
-           and estimators," IEEE Transactions on Automatic Control, 45(3),
-           pp. 477-482 (March 2000).
-    .. [4] E. A. Wan and R. Van der Merwe, “The Unscented Kalman filter for
-           Nonlinear Estimation,” in Proc. Symp. Adaptive Syst. Signal
-           Process., Commun. Contr., Lake Louise, AB, Canada, Oct. 2000.
-           https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
-    .. [5] Wan, Merle "The Unscented Kalman Filter," chapter in *Kalman
-           Filtering and Neural Networks*, John Wiley & Sons, Inc., 2001.
-    .. [6] R. Van der Merwe "Sigma-Point Kalman Filters for Probabilitic
-           Inference in Dynamic State-Space Models" (Doctoral dissertation)
-    """
-
-"""
-# Configurable Settings:
-dim_x = 6
-dim_z = 3
-'''hx = hx
-fx = fx'''
-dt = 30.0
-Qvar = 0.000001
-obs_noise = np.repeat(100,3)
-x = np.array([ 34090.8583,  23944.7744,  6503.06682, -1.983785080,2.15041744,  0.913881611])
-P = np.eye(6) * np.array([ 100,  100,  100, 0.1, 0.1,  0.1])
-alpha = 0.001
-beta = 2.0
-kappa = 3-6
-
-# derived values
-Wm, Wc = compute_filter_weights(alpha, beta, kappa, dim_x) # weights for the means and covariances.
-R = np.eye(dim_z)*obs_noise
-Q = Q_discrete_white_noise(dim=2, dt=dt, var=Qvar**2, block_size=3, order_by_dim=False)
-lambda_ = alpha**2 * (dim_x + kappa) - dim_x
-num_sigmas = 2*dim_x + 1
-# sigma points transformed through f(x) and h(x)
-# variables for efficiency so we don't recreate every update
-sigmas_f = np.zeros((num_sigmas, dim_x)) # f(x)
-sigmas_h = np.zeros((num_sigmas, dim_z)) # h(x)
-
-
-Q_comp = pf_Q_discrete_white_noise(dim=2, dt=dt, var=Qvar**2, block_size=3, order_by_dim=False)
-points_compare = pf_MerweScaledSigmaPoints(n=6, alpha=0.001, beta=2., kappa=3-6)
-filter_comp = pf_UnscentedKalmanFilter(dim_x,dim_z,dt,hx,fx,points_compare)
-filter_comp.R = R
-filter_comp.x = x
-filter_comp.P = P
-filter_comp.Q = Q_comp
-
-x_post, P_post, sigmas_f_post = predict(x, P, sigmas_f, Wm, Wc, Q, dt, dim_x)
-filter_comp.predict()
-np.array_equal(P_post,filter_comp.P)
-np.array_equal(x_post,filter_comp.x)
-#np.array_equal(sigmas_f_post,filter_comp.sigmas_f) # predict does not return sigmas_f
-np.array_equal(R,filter_comp.R)
-np.array_equal(Q,filter_comp.Q)
-np.array_equal(Wm,filter_comp.Wm)
-np.array_equal(Wc,filter_comp.Wc)
-#np.array_equal(residual_x,filter_comp.residual_x)
-#np.array_equal(residual_z,filter_comp.residual_z)
-np.array_equal(Q,filter_comp.Q)
-
-
-z = x[0:3]+np.diag(R)
-x_post2, P_post2 = update(x_post, P_post, z, R, Wm, Wc, sigmas_f_post, sigmas_h)
-filter_comp.update(z)
-
-np.array_equal(P_post2,filter_comp.P)
-np.array_equal(x_post2,filter_comp.x)
-
-sim_noise = []
-for i in range(10):
-    sim_noise.append(np.random.normal(loc=0,scale=10, size=3))
-
-import copy
-state = copy.deepcopy(x)
-for sn in sim_noise:
-    state = fx(state,dt)
-    z = state[:3] + sn
-    filter_comp.predict()
-    #filter_comp.update(z)
-    x, P, sigmas_f = predict(x, P, sigmas_f, Wm, Wc, Q, dt, dim_x)
-    #x, P = update(x, P, z, R, Wm, Wc, sigmas_f, sigmas_h)
-
-np.array_equal(P,filter_comp.P)
-np.array_equal(x,filter_comp.x)
-np.subtract(np.linalg.det(P),np.linalg.det(filter_comp.P))/np.linalg.det(P)
-np.mean(np.subtract(x,filter_comp.x)/x)
-"""
