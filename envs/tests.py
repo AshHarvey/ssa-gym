@@ -183,18 +183,7 @@ the predict function did not correctly calculate the mean. Could use some lookin
 from envs.filter import predict
 from poliastro.core.propagation import markley
 from numba import njit
-
-@njit
-def fx(x, dt):
-    x = markley(398600.4418,x[:3],x[3:],dt) #  # (km^3 / s^2), (km), (km/s), (s)
-    x = x.flatten()
-    return x
-
-@njit
-def hx(x):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
-    return x[:3]
+from envs.dynamics import fx_xyz_markley as fx, hx_xyz as hx
 
 # Configurable Settings:
 Q = noise
@@ -290,47 +279,7 @@ print("Test 8: step 100, update 2 errors: x: ", Test8c, ", P: ", Test8d)
 
 # !------------ Test 9 - Az El means and residuals
 from numba import jit
-
-@jit(['float64[:](float64[:],float64[:])'])
-def residual_z(a, b):
-    # prep array to receive results
-    c = np.copy(a)
-    # force angles in range <-pi, pi>
-    while a[1] > np.pi or a[1] < -np.pi:
-        a[0] = a[0] - np.sign(a[0])*np.pi*2
-    while a[1] > np.pi or a[1] < -np.pi:
-        a[1] = a[1] - np.sign(a[1])*np.pi*2
-    # find differ, a - b
-    c[0] = (a[0] - b[0] + np.pi) % (np.pi*2) - np.pi
-    c[1] = (a[1] - b[1] + np.pi) % (np.pi*2) - np.pi
-    c[2] = np.subtract(a[2], b[2])
-    while c[0] > np.pi or c[0] < -np.pi:
-        c[0] = c[0] - np.sign(c[0]) * np.pi * 2
-    while c[1] > np.pi or c[1] < -np.pi:
-        c[1] = c[1] - np.sign(c[1]) * np.pi * 2
-    return c
-
-@njit
-def mean_z(Wm, sigmas):
-    z = np.zeros(3)
-    sum_sin_az, sum_cos_az, sum_sin_el, sum_cos_el = 0., 0., 0., 0.
-
-    Wm = Wm/np.sum(Wm)
-
-    for i in range(len(sigmas)):
-        s = sigmas[i]
-        sum_sin_az = sum_sin_az + np.sin(s[0])*Wm[i]
-        sum_cos_az = sum_cos_az + np.cos(s[0])*Wm[i]
-        sum_sin_el = sum_sin_el + np.sin(s[1]+np.pi)*Wm[i]
-        sum_cos_el = sum_cos_el + np.cos(s[1]+np.pi)*Wm[i]
-        z[2] = z[2] + s[2] * Wm[i]
-    z[0] = np.arctan2(sum_sin_az, sum_cos_az)
-    z[1] = np.arctan2(sum_sin_el, sum_cos_el)-np.pi
-    while z[0] > 2*np.pi or z[0] < 0:
-        z[0] = z[0] - np.sign(z[0])*np.pi*2
-    while z[1] > np.pi or z[1] < -np.pi:
-        z[1] = z[1] - np.sign(z[1])*np.pi*2
-    return z
+from envs.dynamics import residual_z_aer as residual_z, mean_z_aer as mean_z
 
 residual_az_cases = [0, 0.999, 90.0, 179.001, 180.001, 270.0, 359.99, 360]
 residual_az_cases = np.radians(residual_az_cases)
@@ -459,43 +408,14 @@ else:
     print("Test 9b: mean_z test 2 failed")
 
 # !------------ Test 10 - Az El Updates
-from envs.transformations import lla2itrs, _itrs2azel
-
+from envs.transformations import lla2itrs
+from envs.dynamics import hx_aer_erfa as hx, hx_aer_astropy as hx2
 
 observer_lat = np.radians(38.828198)
 observer_lon = np.radians(-77.305352)
 observer_alt = np.float64(20.0) # in meters
 observer_lla = np.array((observer_lon, observer_lat, observer_alt))
 observer_itrs = lla2itrs(observer_lla)/1000 # meter -> kilometers
-
-@njit
-def hx(x_gcrs, *hx_args):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
-    trans_matrix = hx_args[0][0]
-    observer_itrs = hx_args[0][1]
-    x_itrs = trans_matrix @ x_gcrs[:3]
-    aer = _itrs2azel(observer_itrs, x_itrs)
-    return aer
-
-def hx2(x, *hx_args):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
-    t = hx_args[0][0]
-    obs_lat = hx_args[0][1]
-    obs_lon = hx_args[0][2]
-    obs_height = hx_args[0][3]
-    object = SkyCoord(x=x[0] * u.km, y=x[1] * u.km, z=x[2] * u.km, frame='gcrs',
-                   representation_type='cartesian', obstime=t)
-    obs = EarthLocation.from_geodetic(lon=obs_lon*u.rad, lat=obs_lat*u.rad, height=obs_height*u.m)
-    AltAz_frame = AltAz(obstime=t, location=obs)
-    results = object.transform_to(AltAz_frame)
-
-    az = results.az.to_value(u.rad)
-    alt = results.alt.to_value(u.rad)
-    sr = results.distance.to_value(u.km)
-    aer = np.array([az, alt, sr])
-    return aer
 
 t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
 
@@ -510,12 +430,12 @@ z2 = hx2(x, hx_args2)
 
 hx_error = z2 - z1
 
-print("Test 9a: hx error in azimuth (arc seconds) = ", np.degrees(hx_error[0])*60*60)
-print("Test 9b: hx error in elevation (arc seconds) = ", np.degrees(hx_error[1])*60*60)
-print("Test 9c: hx error in slant range (meters) = ", np.degrees(hx_error[2])*1000)
-print("I am unsure if these errors are mine or AstroPy's given the above matched. Each sub-function checks "
-      "out against AstroPy, but the end to end case has significantly more error... opened issue with AstroPy"
-      "at https://github.com/astropy/astropy/issues/10407")
+print("Test 10a: hx error in azimuth (arc seconds) = ", np.degrees(hx_error[0])*60*60)
+print("Test 10b: hx error in elevation (arc seconds) = ", np.degrees(hx_error[1])*60*60)
+print("Test 10c: hx error in slant range (meters) = ", np.degrees(hx_error[2])*1000)
+print("I am unsure if these errors are mine or AstroPy's given the above matched. Each sub-function \n"
+      "checks out against AstroPy, but the end to end case has significantly more error... \n"
+      "Issue opened with AstroPy at https://github.com/astropy/astropy/issues/10407")
 
 t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
 t = [t]
@@ -532,14 +452,34 @@ for i in range(13):
 
 from envs.filter import update
 
-@jit(['float64[:](float64[:],float64[:])'])
-def residual_x(a,b):
-    c = np.subtract(a,b)
-    return c
+exit()
 
+# Configurable Settings:
+dim_x = 6
+dim_z = 3
+dt = 30.0
+qvar = 0.000001
+R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
+x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
+P = np.diag([100,  100,  100, 0.1, 0.1,  0.1])
+alpha = 0.001
+beta = 2.0
+kappa = 3-6
+
+# check weights
+points_fp = MerweScaledSigmaPoints_fp(dim_x, alpha, beta, kappa)
+
+# Configurable Settings:
 Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
+ukf = UnscentedKalmanFilter_pf(dim_x, dim_z, dt, hx, fx, points_fp)
+ukf.x = np.copy(x)
+ukf.P = np.copy(P)
+ukf.Q = np.copy(Q)
 
-for i in range(1):
+# check filter predict
+ukf.predict(dt)
+
+for i in range(2):
     for j in range(10):
         x_post4, P_post4, sigmas_post4 = predict(x_post4, P_post4, Wm, Wc, Q, dt, lambda_, fx)
         x_true = fx(x_true, dt)
