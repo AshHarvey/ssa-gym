@@ -64,7 +64,7 @@ def hx_aer_astropy(x, *hx_args):
     return aer
 
 
-@jit(['float64[:](float64[:],float64[:])'])
+@jit(['float64[::1](float64[::1],float64[::1])'])
 def residual_z_aer(a, b):
     # prep array to receive results
     c = np.copy(a)
