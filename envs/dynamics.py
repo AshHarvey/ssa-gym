@@ -1,9 +1,10 @@
-from poliastro.core.propagation import markley
-from numba import njit, jit, types
-from envs.transformations import _itrs2azel
-from astropy.coordinates import SkyCoord, ITRS, EarthLocation, AltAz
-from astropy import units as u
 import numpy as np
+from astropy import units as u
+from astropy.coordinates import SkyCoord, EarthLocation, AltAz
+from numba import njit, jit
+from poliastro.core.propagation import markley
+
+from envs.transformations import _itrs2azel
 
 
 #@jit(['float64[::](float64[::],float64)'],nopython=True)
