@@ -385,7 +385,7 @@ c = np.array([1.16194447e+00, -2.89490743e-01, 4.27983502e+04])
 
 mean_comp = np.array([ 1.16152779e+00, -2.89490749e-01,  4.27900165e+04])
 
-mean1 = mean_z(Wm, sigmas_h)
+mean1 = mean_z(sigmas_h, Wm)
 
 if np.allclose(mean_comp,mean1):
     print("Test 9b: mean_z test 1 successful")
@@ -398,7 +398,7 @@ sigmas_h = np.array([[ np.pi*1e-05, np.pi - np.pi*1e-05,  40000],
                      [ np.pi*2 - np.pi*1e-05, -np.pi + np.pi*1e-01,  60000.0],
                      [ np.pi*1e-05, np.pi - np.pi*1e-01,  50000.0]])
 
-mean2 = mean_z(np.repeat(1, 5), sigmas_h)
+mean2 = mean_z(sigmas_h, np.repeat(1, 5))
 
 mean_comp = np.array([6.40864997e-06, 3.07800526e+00, 5.00000000e+04])
 
@@ -407,7 +407,7 @@ if np.allclose(mean_comp,mean2):
 else:
     print("Test 9b: mean_z test 2 failed")
 
-# !------------ Test 10 - Az El Updates
+# !------------ Test 10 - Az El Measurement Function
 from envs.transformations import lla2itrs
 from envs.dynamics import hx_aer_erfa as hx, hx_aer_astropy as hx2
 
@@ -437,56 +437,82 @@ print("I am unsure if these errors are mine or AstroPy's given the above matched
       "checks out against AstroPy, but the end to end case has significantly more error... \n"
       "Issue opened with AstroPy at https://github.com/astropy/astropy/issues/10407")
 
-t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
-t = [t]
-for i in range(500):
-    t.append(t[-1] + timedelta(seconds=30))
-trans_matrix = gcrs2irts_matrix_a(t, eop)
+print("Done")
+exit() # remove before flight
 
-R = np.array([np.radians(1/60/60),np.radians(1/60/60),1.0])
+# !------------ Test 11 - Az El Updates
+from envs.filter import compute_filter_weights, Q_discrete_white_noise, sigma_points, update, predict
+from filterpy.kalman import MerweScaledSigmaPoints as MerweScaledSigmaPoints_fp
+from filterpy.kalman.UKF import UnscentedKalmanFilter as UnscentedKalmanFilter_pf
+from envs.dynamics import residual_xyz as residual_x, residual_z_aer as residual_z, mean_z_aer as mean_z
+from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx, hx_aer_kwargs as hx_dict
+from envs.transformations import lla2itrs, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
+from datetime import datetime, timedelta
+import numpy as np
 
-sigmas_h = np.copy(ukf.sigmas_h)
-for i in range(13):
-    hx_args = (trans_matrix[0], observer_itrs)
-    sigmas_h[i] = hx(sigmas_h[i], hx_args)
+# Sim Configurable Setting:
+max_step = 50
+obs_interval = 10
+observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
+x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
+t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
+eop = get_eops()
 
-from envs.filter import update
-
-exit()
-
-# Configurable Settings:
+# Filter Configurable Settings:
 dim_x = 6
 dim_z = 3
 dt = 30.0
-qvar = 0.000001
 R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
+Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
 x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
 P = np.diag([100,  100,  100, 0.1, 0.1,  0.1])
 alpha = 0.001
 beta = 2.0
 kappa = 3-6
 
-# check weights
+# Derived Settings:
+lambda_ = alpha**2 * (dim_x + kappa) - dim_x
+points = sigma_points(x, P, lambda_, dim_x)
 points_fp = MerweScaledSigmaPoints_fp(dim_x, alpha, beta, kappa)
+Wc, Wm = compute_filter_weights(alpha, beta, kappa, dim_x)
+x_true = np.copy(x)
+x_filter = np.copy(x)
+P_filter = np.copy(P)
+t = [t_init]
+step = [0]
+observer_lla = np.array((np.radians(observer[1]), np.radians(observer[0]), observer[2]))
+observer_itrs = lla2itrs(observer_lla)/1000 # meter -> kilometers
 
-# Configurable Settings:
-Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
-ukf = UnscentedKalmanFilter_pf(dim_x, dim_z, dt, hx, fx, points_fp)
+# FilterPy Configurable Settings:
+ukf = UnscentedKalmanFilter_pf(dim_x, dim_z, dt, hx_dict, fx, points_fp)
 ukf.x = np.copy(x)
 ukf.P = np.copy(P)
 ukf.Q = np.copy(Q)
+ukf.R = np.copy(R)
+ukf.residual_z = residual_z
+ukf.z_mean = mean_z
 
-# check filter predict
-ukf.predict(dt)
-
-for i in range(2):
-    for j in range(10):
-        x_post4, P_post4, sigmas_post4 = predict(x_post4, P_post4, Wm, Wc, Q, dt, lambda_, fx)
-        x_true = fx(x_true, dt)
-    run = i*10 + j
-    hx_args = (trans_matrix[run], observer_itrs)
-    c = hx(x_true[:3], hx_args)
-    x_post4, P_post4 = update(x_post4, P_post4, c, Wm, Wc, R, sigmas_post4, hx, residual_x, mean_z, residual_z, hx_args)
+# run the filter
+for i in range(max_step):
+    # step truth forward
+    step.append(step[-1] + 1)
+    t.append(t[-1] + timedelta(seconds=dt))
+    x_true = fx(x_true, dt)
+    # step FilterPy forward
+    ukf.predict(dt)
+    # step filter forward
+    x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+    # Check if obs should be taken
+    if step[-1] % obs_interval == 0:
+        # get obs:
+        trans_matrix = gcrs2irts_matrix(t[-1], eop)
+        hx_args = (trans_matrix, observer_itrs)
+        hx_kwargs = {"trans_matrix": trans_matrix, "observer_itrs": observer_itrs}
+        z_true = hx(x_true, hx_args)
+        z_true = hx_dict(x_true, **hx_kwargs)
+        # update FilterPy
+        ukf.update(z_true, **hx_kwargs)
+        x_filter, P_filter = update(x_filter, P_filter, z_true, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
 
 
 """
@@ -498,4 +524,4 @@ import timeit
 timeit.timeit(wrapped, number=2880)
 """
 
-print("Done")
+
