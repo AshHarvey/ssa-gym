@@ -524,7 +524,7 @@ print("Test 11b: step ", max_step, " error after ", int(max_step/obs_interval), 
 # !------------ Test 12 - Az El Updates with Uncertainty
 # Sim Configurable Setting:
 max_step = 2880
-obs_interval = 10
+obs_interval = 50
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
 x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
 t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
@@ -537,7 +537,7 @@ dt = 30.0
 R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
 Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
 x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
-P = np.diag([100,  100,  100, 0.1, 0.1,  0.1])
+P = np.diag([10,  10,  10, 0.01, 0.01,  0.01])
 alpha = 0.001
 beta = 2.0
 kappa = 3-6
@@ -564,6 +564,7 @@ ukf.R = np.copy(R)
 ukf.residual_z = residual_z
 ukf.z_mean = mean_z
 
+fault = False
 # run the filter
 for i in range(max_step):
     # step truth forward
@@ -573,7 +574,19 @@ for i in range(max_step):
     # step FilterPy forward
     ukf.predict(dt)
     # step filter forward
-    x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+    if not fault:
+        try:
+            x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+        except np.linalg.LinAlgError:
+            print("Matrix is not positive definite error on step ", step[-1], " x: ", np.round(x_filter,4), ", P: ", np.round(np.diag(P_filter),4))
+            fault = True
+            fault_step = np.copy(step[-1])
+            fault_type = "Matrix is not positive definite"
+        except not np.linalg.LinAlgError:
+            print("Unknown error on step ", step[-1], " x: ", np.round(x_filter,4), ", P: ", np.round(np.diag(P_filter),4))
+            fault = True
+            fault_step = np.copy(step[-1])
+            fault_type = "Unknown Issue"
     # Check if obs should be taken
     if step[-1] % obs_interval == 0:
         # get obs:
@@ -585,7 +598,9 @@ for i in range(max_step):
         z_filter = z_true + z_noise
         # update FilterPy
         ukf.update(z_filter, **hx_kwargs)
-        x_filter, P_filter = update(x_filter, P_filter, z_filter, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
+        if not fault:
+            x_filter, P_filter = update(x_filter, P_filter, z_filter, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
+
 
 test12a_error = [distance.euclidean(ukf.x[:3],x_true[:3]), distance.euclidean(ukf.x[3:],x_true[3:])]
 test12b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean(x_filter[3:],x_true[3:])]
@@ -593,8 +608,11 @@ test12b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean
 print("Test 12a: step ", max_step, " error after ", int(max_step/obs_interval), " updates (FilterPy with noise): ",
       np.round(test12a_error[0]*1000,4), " meters, ", np.round(test12a_error[1]*1000,4), " meters per second")
 
-print("Test 12b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter with noise): ",
-      np.round(test12b_error[0]*1000,4), " meters, ", np.round(test12b_error[1]*1000,4), " meters per second")
+if not fault:
+    print("Test 12b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter with noise): ",
+          np.round(test12b_error[0]*1000,4), " meters, ", np.round(test12b_error[1]*1000,4), " meters per second")
+else:
+    print("Test 12b: unsuccessful with a fault on step ", fault_step, " and error type: ", fault_type)
 
 print("Done")
 
