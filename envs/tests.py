@@ -520,6 +520,18 @@ print("Test 11a: step ", max_step, " error after ", int(max_step/obs_interval), 
 print("Test 11b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter): ",
       np.round(test11b_error[0]*1000,4), " meters, ", np.round(test11b_error[1]*1000,4), " meters per second")
 
+def time_filter_predict():
+    global x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx
+    x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+
+def time_filterpy_predict():
+    global ukf
+    ukf.predict()
+
+import timeit
+
+print("Test 11c: Time to complete 500 steps using njit prediction: ", np.round(timeit.timeit(time_filter_predict, number=500),4), " seconds")
+print("Test 11d: Time to complete 500 steps using FilterPy prediction: ", np.round(timeit.timeit(time_filterpy_predict, number=500),4), " seconds")
 
 # !------------ Test 12 - Az El Updates with Uncertainty
 # Sim Configurable Setting:
@@ -613,16 +625,8 @@ if not fault:
           np.round(test12b_error[0]*1000,4), " meters, ", np.round(test12b_error[1]*1000,4), " meters per second")
 else:
     print("Test 12b: unsuccessful with a fault on step ", fault_step, " and error type: ", fault_type)
+    print("Issue is in line 429 of filter.py - U = np.linalg.cholesky((lambda_ + n)*P).T")
+    print("Consider https://stats.stackexchange.com/questions/6364/making-square-root-of-covariance-matrix-positive-definite-matlab/6367#6367")
+    print("This gist has some comparisons: https://gist.github.com/AshHarvey/1be1db0ae95dc99fe6efed7f2831f737")
 
 print("Done")
-
-"""
-def wrapped():
-    mean_z(sigmas_h, Wm)
-
-import timeit
-
-timeit.timeit(wrapped, number=2880)
-"""
-
-
