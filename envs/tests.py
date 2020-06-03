@@ -12,9 +12,10 @@ print("Running Test Cases...")
 
 # !------------ Test 1 - GCRS to ITRS
 from envs.transformations import gcrs2irts_matrix_a, get_eops, gcrs2irts_matrix_b
+
 eop = get_eops()
 
-xyz1: ndarray = np.array([1285410, -4797210, 3994830], dtype=np.float64)
+xyz1: ndarray = np.array([1285410, -4797210, 3994830], dtype=np.float64) # [meters x 3]
 
 t=datetime(year = 2007, month = 4, day = 5, hour = 12, minute = 0, second = 0)
 object = SkyCoord(x=xyz1[0] * u.m, y=xyz1[1] * u.m, z=xyz1[2] * u.m, frame='gcrs',
@@ -27,7 +28,7 @@ test1b_error = distance.euclidean(itrs.cartesian.xyz._to_value(u.m),
                                   gcrs2irts_matrix_b(t, eop) @ xyz1)
 assert test1a_error < 25, print("Failed Test 1: GCRS to ITRS transformation")
 print("Test 1a: GCRS to ITRS (a) error in meters: ", test1a_error)
-print("Test 1b: GCRS to ITRS (b) error in kilometers: ", test1b_error)
+print("Test 1b: GCRS to ITRS (b) error in meters: ", test1b_error)
 
 # !------------ Test 2a - ITRS to LLA
 from envs.transformations import itrs2lla
@@ -55,8 +56,8 @@ print("Test 2b: ITRS to LLA (python) error in rads,rads,meters: ", test2_error)
 
 # !------------ Test 3 - ITRS-ITRS to AzElSr
 from envs.transformations import itrs2azel
-xyz1 = np.array([1285410, -4797210, 3994830], dtype=np.float64)
-xyz2 = np.array([1202990, -4824940, 3999870], dtype=np.float64)
+xyz1 = np.array([1285410, -4797210, 3994830], dtype=np.float64) # [meters x 3]
+xyz2 = np.array([1202990, -4824940, 3999870], dtype=np.float64) # [meters x 3]
 
 observer = EarthLocation.from_geocentric(x=xyz1[0]*u.m,y=xyz1[1]*u.m, z=xyz1[2]*u.m)
 target = SkyCoord(x=xyz2[0] * u.m, y=xyz2[1] * u.m, z=xyz2[2] * u.m, frame='itrs',
@@ -139,8 +140,8 @@ dim_z = 3
 dt = 30.0
 qvar = 0.000001
 obs_noise = np.repeat(100, 3)
-x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
-P = np.eye(6) * np.array([100,  100,  100, 0.1, 0.1,  0.1])
+x = np.array([34090858.3,  23944774.4,  6503066.82, -1983.785080, 2150.41744,  913.881611]) # [meters x 3, meters / second x3]
+P = np.eye(6) * np.array([1000,  1000,  1000, 1, 1,  1])
 alpha = 0.001
 beta = 2.0
 kappa = 3-6
@@ -181,9 +182,7 @@ the predict function did not correctly calculate the mean. Could use some lookin
 
 # !------------ Test 7 - Filter Prediction
 from envs.filter import predict
-from poliastro.core.propagation import markley
-from numba import njit
-from envs.dynamics import fx_xyz_markley as fx, hx_xyz as hx
+from envs.dynamics import fx_xyz_vallado as fx, hx_xyz as hx
 
 # Configurable Settings:
 Q = noise
@@ -242,7 +241,7 @@ x_true = np.copy(x)
 for i in range(50):
     x_true = fx(x_true, dt)
 
-R = np.array([1.25, 1.25, 1.25])
+R = np.array([125, 125, 125])
 z = x_true[:3]
 
 x_post4, P_post4 = update(ukf.x, ukf.P, z, Wm, Wc, R, ukf.sigmas_f, hx)
@@ -257,28 +256,35 @@ assert np.abs(Test8b) < 1.0e-10, print("Test 8b: Updated covariances don't match
 
 print("Test 8: step 50, update 1 errors: x: ", Test8a, ", P: ", Test8b)
 
+fault = False
 for i in range(50):
     ukf.predict(dt)
-    x_post4, P_post4, sigmas_post4 = predict(x_post4, P_post4, Wm, Wc, Q, dt, lambda_, fx)
+    try:
+        x_post4, P_post4, sigmas_post4 = predict(x_post4, P_post4, Wm, Wc, Q, dt, lambda_, fx)
+    except np.linalg.LinAlgError:
+        fault = True
+        print("Matrix is not positive definite error on step: ", i+1, "; trace P: ", np.trace(P_post4))
 
 for i in range(50):
     x_true = fx(x_true, dt)
 
 z = x_true[:3]
 
-x_post4, P_post4 = update(x_post4, P_post4, z, Wm, Wc, R, sigmas_post4, hx)
+if not fault:
+    x_post4, P_post4 = update(x_post4, P_post4, z, Wm, Wc, R, sigmas_post4, hx)
 
 ukf.update(z=z, R=R)
 
-Test8c = np.prod((x_post4-ukf.x)) / np.prod(x_post4)
-assert np.abs(Test8c) < 1.0e-10, print("Test 8c: Updated means don't match")
-Test8d = det((P_post4-ukf.P))/det(P_post4)
-assert np.abs(Test8d) < 1.0e-10, print("Test 8d: Updated covariances don't match")
+Test8c = distance.euclidean(x_post4[:3], ukf.x[:3])
+if Test8c > 1.0e+3:
+    print("Test 8c: Updated means don't match")
+Test8d = (det(P_post4)-det(ukf.P))/det(ukf.P)
+if np.abs(Test8d) > 1.0e+3:
+    print("Test 8d: Updated covariances don't match")
 
 print("Test 8: step 100, update 2 errors: x: ", Test8c, ", P: ", Test8d)
 
 # !------------ Test 9 - Az El means and residuals
-from numba import jit
 from envs.dynamics import residual_z_aer as residual_z, mean_z_aer as mean_z
 
 residual_az_cases = [0, 0.999, 90.0, 179.001, 180.001, 270.0, 359.99, 360]
@@ -448,11 +454,13 @@ from datetime import datetime, timedelta
 import numpy as np
 from scipy.spatial import distance
 
+arcsec2rad = np.pi/648000
+
 # Sim Configurable Setting:
 max_step = 500
 obs_interval = 10
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
-x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
+x_init = (34090858.3,  23944774.4,  6503066.82, -1983.785080, 2150.41744,  913.881611) # 3 x m, 3 x m/s
 t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
 eop = get_eops()
 
@@ -460,36 +468,36 @@ eop = get_eops()
 dim_x = 6
 dim_z = 3
 dt = 30.0
-R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
+R = np.diag([1, 1, 1000])
 Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
-x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
-P = np.diag([100,  100,  100, 0.1, 0.1,  0.1])
+P = np.diag([1000,  1000,  1000, 1, 1, 1])
 alpha = 0.001
 beta = 2.0
 kappa = 3-6
 
 # Derived Settings:
 lambda_ = alpha**2 * (dim_x + kappa) - dim_x
-points = sigma_points(x, P, lambda_, dim_x)
+points = sigma_points(np.copy(x_init), P, lambda_, dim_x)
 points_fp = MerweScaledSigmaPoints_fp(dim_x, alpha, beta, kappa)
 Wc, Wm = compute_filter_weights(alpha, beta, kappa, dim_x)
-x_true = np.copy(x)
-x_filter = np.copy(x)
+x_true = np.copy(x_init)
+x_filter = np.copy(x_init)
 P_filter = np.copy(P)
 t = [t_init]
 step = [0]
 observer_lla = np.array((np.radians(observer[1]), np.radians(observer[0]), observer[2]))
-observer_itrs = lla2itrs(observer_lla)/1000 # meter -> kilometers
+observer_itrs = lla2itrs(observer_lla) # meter
 
 # FilterPy Configurable Settings:
 ukf = UnscentedKalmanFilter_pf(dim_x, dim_z, dt, hx_dict, fx, points_fp)
 ukf.x = np.copy(x)
 ukf.P = np.copy(P)
 ukf.Q = np.copy(Q)
-ukf.R = np.copy(R)
+ukf.R = np.copy(R*[arcsec2rad, arcsec2rad, 1])
 ukf.residual_z = residual_z
 ukf.z_mean = mean_z
 
+fault = False
 # run the filter
 for i in range(max_step):
     # step truth forward
@@ -499,7 +507,14 @@ for i in range(max_step):
     # step FilterPy forward
     ukf.predict(dt)
     # step filter forward
-    x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+    if not fault:
+        try:
+            x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
+        except np.linalg.LinAlgError:
+            fault = True
+            fault_message11 = ["Matrix is not positive definite error on step: ", str(i+1), "; trace P: ", str(np.trace(P_filter))]
+            fault_message11 = ''.join(fault_message11)
+
     # Check if obs should be taken
     if step[-1] % obs_interval == 0:
         # get obs:
@@ -509,16 +524,25 @@ for i in range(max_step):
         z_true = hx(x_true, hx_args)
         # update FilterPy
         ukf.update(z_true, **hx_kwargs)
-        x_filter, P_filter = update(x_filter, P_filter, z_true, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
+        if not fault:
+            x_filter, P_filter = update(x_filter, P_filter, z_true, Wm, Wc, R*[arcsec2rad, arcsec2rad, 1], sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
 
 test11a_error = [distance.euclidean(ukf.x[:3],x_true[:3]), distance.euclidean(ukf.x[3:],x_true[3:])]
 test11b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean(x_filter[3:],x_true[3:])]
 
 print("Test 11a: step ", max_step, " error after ", int(max_step/obs_interval), " updates (FilterPy): ",
-      np.round(test11a_error[0]*1000,4), " meters, ", np.round(test11a_error[1]*1000,4), " meters per second")
+      np.round(test11a_error[0],4), " meters, ", np.round(test11a_error[1],4), " meters per second")
 
 print("Test 11b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter): ",
-      np.round(test11b_error[0]*1000,4), " meters, ", np.round(test11b_error[1]*1000,4), " meters per second")
+      np.round(test11b_error[0],4), " meters, ", np.round(test11b_error[1],4), " meters per second")
+
+if fault:
+    print(fault_message11)
+
+x_filter = np.copy(x_init)
+P_filter = np.copy(P)
+ukf.x = np.copy(x_init)
+ukf.P = np.copy(P)
 
 def time_filter_predict():
     global x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx
@@ -538,7 +562,7 @@ print("Test 11d: Time to complete 500 steps using FilterPy prediction: ", np.rou
 max_step = 2880
 obs_interval = 50
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
-x_init = (34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611) # 3 x km, 3 x km/s
+x_init = (34090858.3,  23944774.4,  6503066.82, -1983.785080, 2150.41744,  913.881611) # 3 x m, 3 x m/s
 t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
 eop = get_eops()
 
@@ -546,10 +570,10 @@ eop = get_eops()
 dim_x = 6
 dim_z = 3
 dt = 30.0
-R = np.diag([np.pi/360/60/60, np.pi/360/60/60, 0.1])
+R = np.diag([1, 1, 1000])
 Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
-x = np.array([34090.8583,  23944.7744,  6503.06682, -1.983785080, 2.15041744,  0.913881611])
-P = np.diag([10,  10,  10, 0.01, 0.01,  0.01])
+x = np.array([34090858.3,  23944774.4,  6503066.82, -1983.785080, 2150.41744,  913.881611])
+P = np.diag([1000,  1000,  1000, 1, 1,  1])
 alpha = 0.001
 beta = 2.0
 kappa = 3-6
@@ -560,7 +584,7 @@ points = sigma_points(x, P, lambda_, dim_x)
 points_fp = MerweScaledSigmaPoints_fp(dim_x, alpha, beta, kappa)
 Wc, Wm = compute_filter_weights(alpha, beta, kappa, dim_x)
 x_true = np.copy(x)
-x_filter = np.copy(x) + np.random.normal(0,np.sqrt(np.diag(P)*1000))/1000
+x_filter = np.copy(x) + np.random.normal(0,np.sqrt(np.diag(P)))
 P_filter = np.copy(P)
 t = [t_init]
 step = [0]
@@ -590,13 +614,15 @@ for i in range(max_step):
         try:
             x_filter, P_filter, sigmas_f_filter = predict(x_filter, P_filter, Wm, Wc, Q, dt, lambda_, fx)
         except np.linalg.LinAlgError:
-            print("Matrix is not positive definite error on step ", step[-1], " x: ", np.round(x_filter,4), ", P: ", np.round(np.diag(P_filter),4))
             fault = True
+            fault_message12 = ["Matrix is not positive definite error on step: ", str(step[-1]), "; trace P: ", str(np.trace(P_filter))]
+            fault_message12 = ''.join(fault_message12)
             fault_step = np.copy(step[-1])
             fault_type = "Matrix is not positive definite"
         except not np.linalg.LinAlgError:
-            print("Unknown error on step ", step[-1], " x: ", np.round(x_filter,4), ", P: ", np.round(np.diag(P_filter),4))
             fault = True
+            fault_message12 = ["Unknown error on step: ", str(step[-1]), "; trace P: ", str(np.trace(P_filter))]
+            fault_message12 = ''.join(fault_message12)
             fault_step = np.copy(step[-1])
             fault_type = "Unknown Issue"
     # Check if obs should be taken
@@ -606,27 +632,296 @@ for i in range(max_step):
         hx_args = (trans_matrix, observer_itrs)
         hx_kwargs = {"trans_matrix": trans_matrix, "observer_itrs": observer_itrs}
         z_true = hx(x_true, hx_args)
-        z_noise = np.random.normal(0, np.sqrt(np.diag(R)*[360*60*60, 360*60*60, 1000]))/[360*60*60, 360*60*60, 1000]
+        z_noise = np.random.normal(0, np.sqrt(np.diag(R))) * [arcsec2rad, arcsec2rad, 1]
         z_filter = z_true + z_noise
         # update FilterPy
         ukf.update(z_filter, **hx_kwargs)
         if not fault:
-            x_filter, P_filter = update(x_filter, P_filter, z_filter, Wm, Wc, R, sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
+            x_filter, P_filter = update(x_filter, P_filter, z_filter, Wm, Wc, R * [arcsec2rad, arcsec2rad, 1], sigmas_f_filter, hx, residual_x, mean_z, residual_z, hx_args)
 
 
 test12a_error = [distance.euclidean(ukf.x[:3],x_true[:3]), distance.euclidean(ukf.x[3:],x_true[3:])]
 test12b_error = [distance.euclidean(x_filter[:3],x_true[:3]), distance.euclidean(x_filter[3:],x_true[3:])]
 
 print("Test 12a: step ", max_step, " error after ", int(max_step/obs_interval), " updates (FilterPy with noise): ",
-      np.round(test12a_error[0]*1000,4), " meters, ", np.round(test12a_error[1]*1000,4), " meters per second")
+      np.round(test12a_error[0],4), " meters, ", np.round(test12a_error[1],4), " meters per second")
+print("Test 12a: step ", max_step, " uncertainty after ", int(max_step/obs_interval), " updates (FilterPy with noise): ",
+      np.round(np.sqrt(np.sum(np.diag(ukf.P)[:3])),4), " meters, ", np.round(np.sqrt(np.sum(np.diag(ukf.P)[3:])),4), " meters per second")
 
-if not fault:
-    print("Test 12b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (Filter with noise): ",
-          np.round(test12b_error[0]*1000,4), " meters, ", np.round(test12b_error[1]*1000,4), " meters per second")
-else:
-    print("Test 12b: unsuccessful with a fault on step ", fault_step, " and error type: ", fault_type)
+if fault:
+    print(fault_message12)
     print("Issue is in line 429 of filter.py - U = np.linalg.cholesky((lambda_ + n)*P).T")
     print("Consider https://stats.stackexchange.com/questions/6364/making-square-root-of-covariance-matrix-positive-definite-matlab/6367#6367")
     print("This gist has some comparisons: https://gist.github.com/AshHarvey/1be1db0ae95dc99fe6efed7f2831f737")
+else:
+    print("Test 12b: step ", max_step, " error after ", int(max_step/obs_interval), " updates (filter.py with noise): ",
+          np.round(test12b_error[0], 4), " meters, ", np.round(test12b_error[1], 4), " meters per second")
+    print("Test 12b: step ", max_step, " uncertainty after ", int(max_step/obs_interval), " updates (filter.py with noise): ",
+          np.round(np.sqrt(np.sum(np.diag(P_filter)[:3])),4), " meters, ", np.round(np.sqrt(np.sum(np.diag(P_filter)[3:])),4), " meters per second")
+
+# !------------ Test 13 - FilterPy Az El Updates with Uncertainty and Multiple RSOs
+from filterpy.kalman import MerweScaledSigmaPoints as SigmasPoints
+from filterpy.kalman.UKF import UnscentedKalmanFilter
+from filterpy.common import Q_discrete_white_noise as Q_noise_fn
+from envs.dynamics import residual_z_aer as residual_z, mean_z_aer as mean_z
+from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx, hx_aer_kwargs as hx_dict
+from envs.transformations import lla2itrs, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
+from datetime import datetime, timedelta
+import numpy as np
+from envs.dynamics import init_state_vec
+from tqdm import tqdm
+from copy import copy
+import time
+
+arcsec2rad = np.pi/648000
+
+# Sim Configurable Setting:
+max_step = 2880
+obs_interval = 50
+rso_count = 50
+observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
+x_init = [init_state_vec(seed=i) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
+t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
+eop = get_eops()
+
+# Filter Configurable Settings:
+dim_x = 6
+dim_z = 3
+dt = 30.0
+R = np.diag([1, 1, 1000]) # arc second, arc second, meters
+Q = Q_noise_fn(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
+P_init = [np.diag([1000,  1000,  1000, 1, 1,  1]) for i in range(rso_count)]
+alpha = 0.000001
+beta = 2.0
+kappa = 3-6
+
+# Derived Settings:
+x_true = np.copy(x_init)
+np.random.seed(50)
+x_filter = copy(x_init)
+for i in range(len(x_init)):
+    x_filter[i] = x_init[i] + np.random.normal(0,np.sqrt(np.diag(P_init[i])))
+t = [t_init]
+step = [0]
+observer_lla = np.array((np.radians(observer[1]), np.radians(observer[0]), observer[2]))
+observer_itrs = lla2itrs(observer_lla) # meter
+
+# FilterPy Configurable Settings:
+filters = []
+for i in range(rso_count):
+    filters.append(UnscentedKalmanFilter(dim_x, dim_z, dt, hx_dict, fx, points=SigmasPoints(n=6, alpha=0.001, beta=2., kappa=3-6)))
+    filters[-1].x = np.copy(x_filter[i])
+    filters[-1].P = np.copy(P_init[i])
+    filters[-1].Q = np.copy(Q)
+    filters[-1].R = np.copy(R)
+    filters[-1].residual_z = residual_z
+    filters[-1].z_mean = mean_z
+
+fault = np.repeat(False, rso_count)
+fault_step = np.repeat(np.nan, rso_count)
+fault_type = np.repeat("No Issue", rso_count)
+z_true = [np.copy(xx[:3]) for xx in x_true]
+trans_matrix = []
+z_filter = np.copy(z_true)
+z_filters = []
+trans_matrix = []
+
+# run the ground truth
+for i in tqdm(range(max_step)):
+    # step truth forward
+    step.append(step[-1] + 1)
+    t.append(t[-1] + timedelta(seconds=dt))
+    for j in range(rso_count):
+        x_true[j] = fx(x_true[j], dt)
+    # Check if obs should be taken
+    z_noise = [np.random.normal(0, np.sqrt(np.diag(R))) * [arcsec2rad,arcsec2rad,1] for i in range(rso_count)]
+    trans_matrix.append(gcrs2irts_matrix(t[-1], eop))
+    hx_args = (trans_matrix[-1], observer_itrs)
+    for j in range(rso_count):
+        z_true[j] = hx(x_true[j], hx_args)
+        z_filter[j] = z_true[j] + z_noise[j]
+    z_filters.append(copy(z_filter))
+
+start13 = time.time()
+# run FilterPy
+for i in tqdm(range(max_step)):
+    # step FilterPy forward with predict
+    for j in range(rso_count):
+        if not fault[j]:
+            try:
+                filters[j].predict(dt)
+            except:
+                # print("Matrix is not positive definite error on step ", i+1, " on RSO ",j," with x: ", np.round(filters[j].x_prior,4), ", P: ", np.round(np.diag(filters[j].P_prior),4))
+                fault[j] = True
+                fault_step[j] = i+1
+                fault_type[j] = "Matrix is not positive definite"
+
+    # Check if obs should be taken
+    if i+1 % obs_interval == 0 or i == 0:
+        # get obs:
+        hx_kwargs = {"trans_matrix": trans_matrix[i], "observer_itrs": observer_itrs}
+        # update FilterPy
+        for j in range(rso_count):
+            filters[j].update(z_filters[i][j], **hx_kwargs)
+
+end13 = time.time()
+
+successful = fault == False
+successful = list(np.nonzero(successful * range(50))[0])
+unsuccessful = list(np.nonzero(fault * range(50))[0])
+
+if np.sum(fault) == 0:
+    print("Test 13: Successful with a FilterPy runtime of ", np.round(end13 - start13, 4), " seconds and 0 failed filters")
+else:
+    print("Test 13: Finished with a FilterPy runtime of ", np.round(end13 - start13, 4), " seconds and ", np.sum(fault), " filters failed; objects: ", unsuccessful)
+
+from scipy.spatial import distance
+
+error_pos = [distance.euclidean(filters[i].x[:3], x_true[i][:3]) for i in successful]
+error_vel = [distance.euclidean(filters[i].x[3:], x_true[i][3:]) for i in successful]
+uncert_pos = [np.round(np.sqrt(np.sum(np.diag(filters[i].P)[:3])), 4) for i in successful]
+uncert_vel = [np.round(np.sqrt(np.sum(np.diag(filters[i].P)[3:])), 4) for i in successful]
+
+print("Test 13a: FilterPy Positional error in meters (min, max, average): ", np.round(np.min(error_pos),2), ", ", np.round(np.max(error_pos), 2), ", ", np.round(np.average(error_pos),2))
+print("Test 13b: FilterPy Velocity error in meters / second (min, max, average): ", np.round(np.min(error_vel),2), ", ", np.round(np.max(error_vel), 2), ", ", np.round(np.average(error_vel),2))
+print("Test 13c: FilterPy Positional uncertainty in meters (min, max, average): ", np.round(np.min(uncert_pos),2), ", ", np.round(np.max(uncert_pos), 2), ", ", np.round(np.average(uncert_pos),2))
+print("Test 13d: FilterPy Velocity uncertainty in meters / second (min, max, average): ", np.round(np.min(uncert_vel),2), ", ", np.round(np.max(uncert_vel), 2), ", ", np.round(np.average(uncert_vel),2))
+
+# !------------ Test 14 - filter.py Az El Updates with Uncertainty and Multiple RSOs
+from envs.filter import compute_filter_weights as weights_fn, Q_discrete_white_noise as Q_noise_fn, sigma_points as sigma_points_fn, update, predict
+from envs.dynamics import residual_z_aer as residual_z, mean_z_aer as mean_z
+from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx
+from envs.transformations import lla2itrs, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
+from datetime import datetime, timedelta
+import numpy as np
+from envs.dynamics import init_state_vec
+from tqdm import tqdm
+from copy import copy
+import time
+
+arcsec2rad = np.pi/648000
+
+# Sim Configurable Setting:
+max_step = 2880
+obs_interval = 50
+rso_count = 50
+observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
+x_init = [init_state_vec(seed=i) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
+t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
+eop = get_eops()
+
+# Filter Configurable Settings:
+dim_x = 6
+dim_z = 3
+dt = 30.0
+R = np.diag([1, 1, 1000]) # arc second, arc second, meters
+Q = Q_noise_fn(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
+P_init = [np.diag([1000,  1000,  1000, 1, 1,  1]) for i in range(rso_count)]
+alpha = 0.000001
+beta = 2.0
+kappa = 3-6
+
+# Derived Settings:
+x_true = np.copy(x_init)
+np.random.seed(50)
+x_filter = copy(x_init)
+for i in range(len(x_init)):
+    x_filter[i] = x_init[i] + np.random.normal(0, np.sqrt(np.diag(P_init[i])))
+t = [t_init]
+step = [0]
+observer_lla = np.array((np.radians(observer[1]), np.radians(observer[0]), observer[2]))
+observer_itrs = lla2itrs(observer_lla) # meter
+filter_R = R*[arcsec2rad, arcsec2rad, 1]
+
+# FilterPy Configurable Settings:
+P_filter = []
+sigmas_f = []
+for i in range(rso_count):
+    P_filter.append(np.copy(P_init[i]))
+    sigmas_f.append(np.zeros((13,6)))
+
+fault14 = np.repeat(False, rso_count)
+fault_step14 = np.repeat(np.nan, rso_count)
+fault_type14 = np.repeat("No Issue", rso_count)
+
+z_true = [np.copy(xx[:3]) for xx in x_true]
+trans_matrix = []
+z_filter = np.copy(z_true)
+z_filters = []
+trans_matrix = []
+
+# run the ground truth
+for i in tqdm(range(max_step)):
+    # step truth forward
+    step.append(step[-1] + 1)
+    t.append(t[-1] + timedelta(seconds=dt))
+    for j in range(rso_count):
+        x_true[j] = fx(x_true[j], dt)
+    # Check if obs should be taken
+    z_noise = [np.random.normal(0, np.sqrt(np.diag(R))) * [arcsec2rad, arcsec2rad, 1] for i in range(rso_count)]
+    trans_matrix.append(gcrs2irts_matrix(t[-1], eop))
+    hx_args = (trans_matrix[-1], observer_itrs)
+    for j in range(rso_count):
+        z_true[j] = hx(x_true[j], hx_args)
+        z_filter[j] = z_true[j] + z_noise[j]
+    z_filters.append(copy(z_filter))
+
+
+start14 = time.time()
+# run FilterPy
+for i in tqdm(range(max_step)):
+    # step FilterPy forward with predict
+    for j in range(rso_count):
+        if not fault14[j]:
+            try:
+                x_filter[j], P_filter[j], sigmas_f[j] = predict(x=x_filter[j], P=P_filter[j], Wm=Wm, Wc=Wc, Q=Q, dt=dt,
+                                                                lambda_=lambda_, fx=fx)
+            except:
+                # print("Matrix is not positive definite error on step ", i+1, " on RSO ",j," with x: ", np.round(filters[j].x_prior,4), ", P: ", np.round(np.diag(filters[j].P_prior),4))
+                fault14[j] = True
+                fault_step14[j] = i+1
+                fault_type14[j] = "Matrix is not positive definite"
+
+    # Check if obs should be taken
+    if i+1 % obs_interval == 0 or i == 0:
+        # get obs:
+        hx_args = (trans_matrix[i], observer_itrs)
+        # update FilterPy
+        for j in range(rso_count):
+            x_filter[j], P_filter[j] = update(x_filter[j], P_filter[j], z_filters[i][j], Wm, Wc, filter_R, sigmas_f[j],
+                                              hx, residual_x, mean_z, residual_z, hx_args)
+
+end14 = time.time()
+
+successful14 = fault14 == False
+successful14 = list(np.nonzero(successful14 * range(50))[0])
+unsuccessful14 = list(np.nonzero(fault14 * range(50))[0])
+
+if np.sum(fault14) == 0:
+    print("Test 14: Successful with a filter.py runtime of ", np.round(end13 - start13, 4), " seconds and 0 failed filters")
+else:
+    print("Test 14: Finished with a filter.py runtime of ", np.round(end13 - start13, 4), " seconds and ", np.sum(fault14), " filters failed; objects: ", unsuccessful14)
+
+from scipy.spatial import distance
+
+error_pos = [distance.euclidean(x_filter[i][:3], x_true[i][:3]) for i in successful14]
+error_vel = [distance.euclidean(x_filter[i][3:], x_true[i][3:]) for i in successful14]
+uncert_pos = [np.round(np.sqrt(np.sum(np.diag(P_filter[i])[:3])), 4) for i in successful14]
+uncert_vel = [np.round(np.sqrt(np.sum(np.diag(P_filter[i])[3:])), 4) for i in successful14]
+
+print("Test 14a: filter.py Positional error in meters (min, max, average) of successful objects: ", np.round(np.min(error_pos),2), ", ", np.round(np.max(error_pos), 2), ", ", np.round(np.average(error_pos),2))
+print("Test 14b: filter.py Velocity error in meters / second (min, max, average) of successful objects: ", np.round(np.min(error_vel),2), ", ", np.round(np.max(error_vel), 2), ", ", np.round(np.average(error_vel),2))
+print("Test 14c: filter.py Positional uncertainty in meters (min, max, average) of successful objects: ", np.round(np.min(uncert_pos),2), ", ", np.round(np.max(uncert_pos), 2), ", ", np.round(np.average(uncert_pos),2))
+print("Test 14d: filter.py Velocity uncertainty in meters / second (min, max, average) of successful objects: ", np.round(np.min(uncert_vel),2), ", ", np.round(np.max(uncert_vel), 2), ", ", np.round(np.average(uncert_vel),2))
+
+error_pos_f = [distance.euclidean(x_filter[i][:3], x_true[i][:3]) for i in unsuccessful14]
+error_vel_f = [distance.euclidean(x_filter[i][3:], x_true[i][3:]) for i in unsuccessful14]
+uncert_pos_f = [np.round(np.sqrt(np.sum(np.diag(P_filter[i])[:3])), 4) for i in unsuccessful14]
+uncert_vel_f = [np.round(np.sqrt(np.sum(np.diag(P_filter[i])[3:])), 4) for i in unsuccessful14]
+
+print("Test 14e: filter.py Positional error in meters (min, max, average) of unsuccessful objects: ", np.round(np.min(error_pos_f),2), ", ", np.round(np.max(error_pos_f), 2), ", ", np.round(np.average(error_pos_f),2))
+print("Test 14f: filter.py Velocity error in meters / second (min, max, average) of unsuccessful objects: ", np.round(np.min(error_vel_f),2), ", ", np.round(np.max(error_vel_f), 2), ", ", np.round(np.average(error_vel_f),2))
+print("Test 14g: filter.py Positional uncertainty in meters (min, max, average) of unsuccessful objects: ", np.round(np.min(uncert_pos_f),2), ", ", np.round(np.max(uncert_pos_f), 2), ", ", np.round(np.average(uncert_pos_f),2))
+print("Test 14h: filter.py Velocity uncertainty in meters / second (min, max, average) of unsuccessful objects: ", np.round(np.min(uncert_vel_f),2), ", ", np.round(np.max(uncert_vel_f), 2), ", ", np.round(np.average(uncert_vel_f),2))
 
 print("Done")
