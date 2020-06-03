@@ -2,17 +2,137 @@ import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from numba import njit, jit
-from poliastro.core.propagation import markley
-
+from poliastro.core.propagation import markley, vallado, pimienta, gooding, danby, farnocchia,  mikkola, func_twobody
+from poliastro.core.elements import coe2rv
 from envs.transformations import _itrs2azel
+from poliastro.bodies import Earth
+import functools
+from scipy.integrate import DOP853, solve_ivp
+
+k = Earth.k.to_value(u.m**3/u.s**2)
+
+
+@njit
+def ad_none(t0, u_, k_):
+    return 0, 0, 0
 
 
 #@jit(['float64[::](float64[::],float64)'],nopython=True)
 @njit
-def fx_xyz_markley(x, dt):
-    x = markley(398600.4418,x[:3],x[3:],dt) #  # (km^3 / s^2), (km), (km/s), (s)
-    x = x.flatten()
-    return x
+def fx_xyz_markley(x, dt, k=k):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = markley(k, r0, v0, tof) # (m^3 / s^2), (m), (m/s), (s)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+@njit
+def fx_xyz_vallado(x, dt, k=k, numiter=350):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    # Compute Lagrange coefficients
+    f, g, fdot, gdot = vallado(k, r0, v0, tof, numiter)
+
+    assert np.abs(f * gdot - fdot * g - 1) < 1e-5  # Fixed tolerance
+
+    # Return position and velocity vectors
+    r = f * r0 + g * v0
+    v = fdot * r0 + gdot * v0
+    x_post = np.zeros(6)
+    x_post[:3] = r
+    x_post[3:] = v
+    return x_post
+
+
+@njit
+def fx_xyz_pimienta(x, dt, k=k):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = pimienta(k, r0, v0, tof)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+@njit
+def fx_xyz_gooding(x, dt, k=k, numiter=150, rtol=1e-8):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = gooding(k, r0, v0, tof, numiter=numiter, rtol=rtol)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+@njit
+def fx_xyz_danby(x, dt, k=k):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = danby(k, r0, v0, tof)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+@njit
+def fx_xyz_farnocchia(x, dt, k=k):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = farnocchia(k, r0, v0, tof)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+@njit
+def fx_xyz_mikkola(x, dt, k=k):
+    r0 = x[:3]
+    v0 = x[3:]
+    tof = dt
+    rv = mikkola(k, r0, v0, tof)
+    x_post = np.zeros(6)
+    x_post[:3] = rv[0]
+    x_post[3:] = rv[1]
+    return x_post
+
+
+def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwargs):
+    u0 = x
+    tof = dt
+
+    f_with_ad = functools.partial(func_twobody, k=k, ad=ad, ad_kwargs=ad_kwargs)
+
+    result = solve_ivp(
+        f_with_ad,
+        (0, tof),
+        u0,
+        rtol=rtol,
+        atol=1e-12,
+        method=DOP853,
+        dense_output=True,
+        events=events,
+    )
+    if not result.success:
+        raise RuntimeError("Integration failed")
+
+    t_end = (
+        min(result.t_events[0]) if result.t_events and len(result.t_events[0]) else None
+    )
+
+    return result.sol(tof)
 
 
 #@jit(['float64[::](float64[::])'],nopython=True)
@@ -111,3 +231,18 @@ def mean_z_aer(sigmas, Wm):
     while z[1] > np.pi or z[1] < -np.pi:
         z[1] = z[1] - np.sign(z[1])*np.pi*2
     return z
+
+
+def init_state_vec(k=k, a=((6378136.6 + 400000), 42164000), ecc=(0.001, 0.3),
+                   inc=(0, 180), raan=(0, 360), argp=(0, 360), nu=(0, 360), seed=None):
+    if not(seed==None):
+        np.random.seed(seed)
+    # k = 398600.4418 # (km^3 / s^2) - Standard gravitational parameter
+    a = np.random.uniform(a[0], a[1]) # (km) – Semi-major axis.
+    ecc = np.random.uniform(ecc[0], ecc[1]) # (Unitless) – Eccentricity.
+    inc = np.radians(np.random.uniform(inc[0], inc[1])) # (rad) – Inclination
+    raan = np.radians(np.random.uniform(raan[0], raan[1])) # (rad) – Right ascension of the ascending node.
+    argp = np.radians(np.random.uniform(argp[0], argp[1])) # (rad) – Argument of the pericenter.
+    nu = np.radians(np.random.uniform(nu[0], nu[1])) # (rad) – True anomaly.
+    p = a*(1-ecc**2) # (km) - Semi-latus rectum or parameter
+    return np.concatenate(coe2rv(k, p, ecc, inc, raan, argp, nu))
