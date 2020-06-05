@@ -7,6 +7,8 @@ from astropy._erfa import c2t06a, cal2jd, gc2gd, dat, gd2gc, xys06a, c2ixys, era
 from numba import njit
 
 a, f = eform(1)  # WGS84 ellipsoid parameters
+arcsec2rad = np.pi/648000 # converts arc seconds to radians
+deg2rad = np.pi/180 # converts degrees to radians
 
 
 def get_eops():
