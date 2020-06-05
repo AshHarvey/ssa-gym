@@ -233,16 +233,15 @@ def mean_z_aer(sigmas, Wm):
     return z
 
 
-def init_state_vec(k=k, a=((6378136.6 + 400000), 42164000), ecc=(0.001, 0.3),
-                   inc=(0, 180), raan=(0, 360), argp=(0, 360), nu=(0, 360), seed=None):
-    if not(seed==None):
-        np.random.seed(seed)
-    # k = 398600.4418 # (km^3 / s^2) - Standard gravitational parameter
-    a = np.random.uniform(a[0], a[1]) # (km) – Semi-major axis.
-    ecc = np.random.uniform(ecc[0], ecc[1]) # (Unitless) – Eccentricity.
-    inc = np.radians(np.random.uniform(inc[0], inc[1])) # (rad) – Inclination
-    raan = np.radians(np.random.uniform(raan[0], raan[1])) # (rad) – Right ascension of the ascending node.
-    argp = np.radians(np.random.uniform(argp[0], argp[1])) # (rad) – Argument of the pericenter.
-    nu = np.radians(np.random.uniform(nu[0], nu[1])) # (rad) – True anomaly.
+def init_state_vec(config = {"a": ((Earth.R_mean.to_value(u.m) + 400000), 42164000), "ecc": (0.001, 0.3),
+                             "inc": (0, 180), "raan": (0, 360), "argp": (0, 360), "nu": (0, 360)}, seed=None):
+    a = config["a"]
+    # k = Earth.k.to_value(u.m**3/u.s**2) - (.^3 / s^2) - Standard gravitational parameter
+    a = np.random.uniform(config["a"][0], config["a"][1]) # (m) – Semi-major axis.
+    ecc = np.random.uniform(config["ecc"][0], config["ecc"][1]) # (Unitless) – Eccentricity.
+    inc = np.radians(np.random.uniform(config["inc"][0], config["inc"][1])) # (rad) – Inclination
+    raan = np.radians(np.random.uniform(config["raan"][0], config["raan"][1])) # (rad) – Right ascension of the ascending node.
+    argp = np.radians(np.random.uniform(config["argp"][0], config["argp"][1])) # (rad) – Argument of the pericenter.
+    nu = np.radians(np.random.uniform(config["nu"][0], config["nu"][1])) # (rad) – True anomaly.
     p = a*(1-ecc**2) # (km) - Semi-latus rectum or parameter
     return np.concatenate(coe2rv(k, p, ecc, inc, raan, argp, nu))
