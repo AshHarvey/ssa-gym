@@ -680,7 +680,8 @@ max_step = 2880
 obs_interval = 50
 rso_count = 50
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
-x_init = [init_state_vec(seed=i) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
+random_state = np.random.RandomState(seed=0)
+x_init = [init_state_vec(random_state=random_state) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
 t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
 eop = get_eops()
 
@@ -806,7 +807,8 @@ max_step = 2880
 obs_interval = 50
 rso_count = 50
 observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
-x_init = [init_state_vec(seed=i) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
+random_state = np.random.RandomState(seed=0)
+x_init = [init_state_vec(random_state=random_state) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
 t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
 eop = get_eops()
 
@@ -923,5 +925,34 @@ print("Test 14e: filter.py Positional error in meters (min, max, average) of uns
 print("Test 14f: filter.py Velocity error in meters / second (min, max, average) of unsuccessful objects: ", np.round(np.min(error_vel_f),2), ", ", np.round(np.max(error_vel_f), 2), ", ", np.round(np.average(error_vel_f),2))
 print("Test 14g: filter.py Positional uncertainty in meters (min, max, average) of unsuccessful objects: ", np.round(np.min(uncert_pos_f),2), ", ", np.round(np.max(uncert_pos_f), 2), ", ", np.round(np.average(uncert_pos_f),2))
 print("Test 14h: filter.py Velocity uncertainty in meters / second (min, max, average) of unsuccessful objects: ", np.round(np.min(uncert_vel_f),2), ", ", np.round(np.max(uncert_vel_f), 2), ", ", np.round(np.average(uncert_vel_f),2))
+
+# !------------ Test 15 - simple env v2 with plots
+
+import gym
+import envs.ssa_tasker_simple_2
+from tqdm import tqdm
+from datetime import datetime
+from envs.dynamics import RE
+
+kwargs = {'steps': 2880, 'rso_count': 50, 'time_step': 30.0, 't_0': datetime(2020, 3, 15, 0, 0, 0),
+          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': (1000, 1000, 1000, 10, 10, 10),
+          'z_sigma': (1, 1, 1000), 'q_sigma': 0.001, 'update_interval': 1, 'sma': ((RE + 400000), 42164000),
+          'ecc': (0.001, 0.3), 'inc': (0, 180), 'raan': (0, 360), 'argp': (0, 360), 'nu': (0, 360)}
+env = gym.make('ssa_tasker_simple-v2', **kwargs)
+
+env.seed(0)
+env.reset()
+
+done = False
+for i in tqdm(range(env.n)):
+    if not done:
+        action = env.action_space.sample()
+        obs, reward, done, _ = env.step(action)
+if not env.failed_filters_id:
+    print("Test 15: No failed Objects")
+else:
+    print("Test 15: Failed Objects: ", env.failed_filters_id)
+
+env.plot_sigma_delta()
 
 print("Done")

@@ -1,6 +1,9 @@
-import numpy as np
-from scipy.spatial import distance
 from numba import njit
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+from datetime import timedelta
+import numpy as np
 
 
 @njit
@@ -42,8 +45,8 @@ def observations(filters_x, filters_P):
     n = len(filters_x)
     observation = np.zeros((n, 12))
     for i in range(n):
-        observation[i,:6] = filters_x[i]
-        observation[i,6:] = np.diag(filters_P[i])
+        observation[i, :6] = filters_x[i]
+        observation[i, 6:] = np.diag(filters_P[i])
     return observation
 
 
@@ -51,6 +54,7 @@ def observations(filters_x, filters_P):
 def dist3d(u, v):
     dist = np.sqrt(np.sum((u-v)**2, axis=1))
     return dist
+
 
 @njit
 def var3d(u):
@@ -68,9 +72,64 @@ def obs_filter_object_x_diagP(filters):
     return np.nan_to_num(obs,nan=99999, posinf=99999)
 
 
-def plot_results(states, filters_x, filters_P, t, title=None):
-    # obtain number for initial error plots
-    errors_position, errors_velocity, filter_error_position, filter_error_velocity = errors(states, filters_x, filters_P)
+def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=None, yscale='log'):
+    n, m = sigma_pos.shape
+    t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
+
+    # plot with errors and uncertainties
+    plt.figure()
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+    pos_lims = (np.min((sigma_pos, delta_pos))*0.9, np.max((sigma_pos, delta_pos))*1.1)
+    vel_lims = (np.min((sigma_vel, delta_vel))*0.9, np.max((sigma_vel, delta_vel))*1.1)
+
+    # Uncertainty in Position
+    plt.subplot(221)
+    plt.plot(t, sigma_pos, linewidth=0.5)
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(pos_lims)
+    plt.title('Uncertainty in Position')
+    plt.grid(True)
+
+    # Uncertainty in Velocity
+    plt.subplot(222)
+    plt.plot(t, sigma_vel, linewidth=0.5)
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(vel_lims)
+    plt.title('Uncertainty in Velocity')
+    plt.grid(True)
+
+    # Error in Position
+    plt.subplot(223)
+    plt.plot(t, delta_pos, linewidth=0.5)
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(pos_lims)
+    plt.title('Error in Position')
+    plt.grid(True)
+
+    # Error in Velocity
+    plt.subplot(224)
+    plt.plot(t, delta_vel, linewidth=0.5)
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(vel_lims)
+    plt.title('Error in Velocity')
+    plt.grid(True)
+
+    # plt.subplots_adjust(top=0.92, bottom=0.08, left=0.10, right=0.95, hspace=0.25, wspace=0.35)
+
+    plt.show()
+
+
+def plot_results(errors_position, errors_velocity, filter_error_position, filter_error_velocity, t, title=None):
     #create a figure
     #plt.subplots_adjust(top=0.9)
     fig = plt.figure(figsize=(24,12),dpi=200)
@@ -86,7 +145,7 @@ def plot_results(states, filters_x, filters_P, t, title=None):
     ax.set_ylabel('Error in meters (log scale)')
     ax.set_yscale('log')
     #create twin axes
-    '''
+
     ax2=ax.twinx()
     #plot to twin axes
     for j in range(len(obs_steps)):
@@ -106,7 +165,7 @@ def plot_results(states, filters_x, filters_P, t, title=None):
     labels = l1[:2]
     labels += [l2[0]]
     ax.legend(handles=handles, labels=labels, loc='upper left')
-    '''
+
 
     ax = fig.add_subplot(122)
     #plot to first axes
@@ -116,7 +175,7 @@ def plot_results(states, filters_x, filters_P, t, title=None):
     ax.set_ylabel('Error in meters (log scale)')
     ax.set_yscale('log')
     #create twin axes
-    '''
+
     ax2=ax.twinx()
     #plot to twin axes
     for j in range(len(obs_steps)):
@@ -136,5 +195,5 @@ def plot_results(states, filters_x, filters_P, t, title=None):
     labels = l1[:2]
     labels += [l2[0]]
     ax.legend(handles=handles, labels=labels, loc='upper left')
-    '''
+
     plt.show()
