@@ -5,7 +5,7 @@ from filterpy.kalman import MerweScaledSigmaPoints as SigmasPoints
 from filterpy.kalman.UKF import UnscentedKalmanFilter as UKF
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
-from envs.transformations import arcsec2rad, deg2rad, lla2itrs, gcrs2irts_matrix_b, get_eops
+from envs.transformations import arcsec2rad, deg2rad, lla2itrs, gcrs2irts_matrix_b, get_eops, itrs2azel
 from envs.dynamics import init_state_vec, fx_xyz_markley as fx, hx_aer_kwargs as hx
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma
 import gym
@@ -31,10 +31,9 @@ class SSA_Tasker_Env(gym.Env):
     metadata = {'render.modes': ['human']}
     RE = Earth.R_mean.to_value(u.m) # radius of earth
 
-    def __init__(self, steps=480, rso_count=50, time_step=30.0, t_0=datetime(2020, 3, 15, 0, 0, 0),
+    def __init__(self, steps=480, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
                  obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
-                 z_sigma=(1, 1, 1000), q_sigma=0.001, update_interval=1, sma=((RE + 400000), 42164000),
-                 ecc=(0.001, 0.3), inc=(0, 180), raan=(0, 360), argp=(0, 360), nu=(0, 360)):
+                 z_sigma=(1, 1, 1000), q_sigma=0.001, update_interval=1, orbits=np.load('sample_orbits.npy')):
         super(SSA_Tasker_Env, self).__init__()
         """Simulation configuration"""
         self.t_0 = t_0 # time at start of simulation
@@ -44,7 +43,7 @@ class SSA_Tasker_Env(gym.Env):
         self.obs_limit = np.radians(obs_limit) # don't observe objects below this elevation [rad]
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
-        self.sma, self.ecc, self.inc, self.raan, self.argp, self.nu = sma, ecc, inc, raan, argp, nu # orbit sample para
+        self.orbits = orbits # orbits to sample from
         self.obs_itrs = lla2itrs(np.array(observer)*[deg2rad, deg2rad, 1]) # lat, lon, height (deg, deg, m) to ITRS (m)
         self.update_interval = update_interval # how often an observation should be taken
         self.i = 0
@@ -104,8 +103,7 @@ class SSA_Tasker_Env(gym.Env):
         """initialize RSO"""
         self.filters = []
         for j in range(self.m):
-            self.x_true[0][j] = init_state_vec(sma=self.sma, ecc=self.ecc, inc=self.inc, raan=self.raan, argp=self.argp,
-                                               nu=self.nu, random_state=self.np_random)
+            self.x_true[0][j] = self.orbits[np.random.randint(low=0, high=self.orbits.shape[0]), :]
             self.x_noise[j] = self.np_random.normal(size=6)*self.x_sigma
             self.x_filter[0][j] = np.copy(self.x_true[0][j] + self.x_noise[j])
             self.P_filter[0][j] = np.copy(self.P_0)
@@ -138,17 +136,17 @@ class SSA_Tasker_Env(gym.Env):
             self.x_true[self.i][j] = fx(self.x_true[self.i-1][j], self.dt)
         """perform predictions"""
         for j in range(self.m):
-            try:
-                if not(j in self.failed_filters_id):
+            if not(j in self.failed_filters_id):
+                try:
                     self.filters[j].predict()
-            except ValueError:
-                self.filter_error(action=a, activity='predict', error_type=', ValueError. ')
-            except np.linalg.LinAlgError:
-                self.filter_error(action=a, activity='predict', error_type=', LinAlgError. ')
-            except:
-                self.filter_error(action=a, activity='predict', error_type=', Unknown. ')
-            self.x_filter[self.i, j] = np.copy(self.filters[j].x) # update filter mean history
-            self.P_filter[self.i, j] = np.copy(self.filters[j].P) # update covariance mean history
+                except ValueError:
+                    self.filter_error(action=a, activity='predict', error_type=', ValueError. ')
+                except np.linalg.LinAlgError:
+                    self.filter_error(action=a, activity='predict', error_type=', LinAlgError. ')
+                except:
+                    self.filter_error(action=a, activity='predict', error_type=', Unknown. ')
+                self.x_filter[self.i, j] = np.copy(self.filters[j].x) # update filter mean history
+                self.P_filter[self.i, j] = np.copy(self.filters[j].P) # update covariance mean history
         """update with observation"""
         if self.i % self.update_interval == 0:
             if not(a in self.failed_filters_id):
@@ -183,7 +181,13 @@ class SSA_Tasker_Env(gym.Env):
         self.filters[action].x = np.copy(self.x_failed)
         self.filters[action].P = np.copy(self.P_failed)
         msg = ["".join(['Failed on ', activity, ' step ', str(self.i-1), error_type,
-                        str(np.round(error_failed(state=self.x_true[self.i-1, action], x=self.x_filter[self.i-1, action],
+                        str(np.round(error_failed(state=self.x_true[self.i-1, action],
+                                                  x=self.x_filter[self.i-1, action],
                                                   P=np.diag(self.P_filter[self.i-1, action])), 2))])]
         self.failed_filters_msg[action] = copy(msg) # record error message
         self.failed_filters_id.append(action) # add filter it list of failed filters
+
+    def visible_objects(self):
+        az = itrs2azel(self.obs_itrs, self.x_true[self.i, :, :3])[:, 1]
+        viz = np.where(az >= self.obs_limit)[0].shape
+        return viz
