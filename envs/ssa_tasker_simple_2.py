@@ -68,6 +68,7 @@ class SSA_Tasker_Env(gym.Env):
         self.trans_matrix = [gcrs2irts_matrix_b(self.t_0 + timedelta(seconds=self.dt)*i,
                                                 self.eops) for i in range(self.n)] # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, z_dim)) # array to contain the noise added to each observation
+        self.z_true = np.empty(shape=(self.n, z_dim)) # array to contain the observations which are made
         self.x_noise = np.empty(shape=(self.m, x_dim)) # array to contain the noise added to each RSO
         self.filters = [] # creates a list for ukfs
         # variables for environment performance
@@ -99,7 +100,7 @@ class SSA_Tasker_Env(gym.Env):
         """reset filter"""
         self.P_0 = np.copy(np.diag(self.x_sigma**2)) # Assumed covariance of the estimates at simulation start
         self.R = np.diag(self.z_sigma**2) # Noise added to the filter during observation updates
-        self.x_true[:], self.x_filter[:], self.P_filter[:], self.obs[:] = 0, 0, 0, 0 # zero out filter history
+        self.x_true[:], self.x_filter[:], self.P_filter[:], self.obs[:], self.z_true[:] = 0, 0, 0, 0, 0 # Clear history
         """initialize RSO"""
         self.filters = []
         for j in range(self.m):
@@ -140,31 +141,28 @@ class SSA_Tasker_Env(gym.Env):
             try:
                 if not(j in self.failed_filters_id):
                     self.filters[j].predict()
+            except ValueError:
+                self.filter_error(action=a, activity='predict', error_type=', ValueError. ')
             except np.linalg.LinAlgError:
-                self.filters[j].x = np.copy(self.x_failed)
-                self.filters[j].P = np.copy(self.P_failed)
-                msg = ["".join(['Failed on prediction step ', str(self.i-1), ', sigma points not positive definite. ',
-                                str(np.round(error_failed(state=self.x_true[self.i-1, j], x=self.x_filter[self.i-1, j],
-                                                          P=np.diag(self.P_filter[self.i-1, j])), 2))])]
-                self.failed_filters_msg[j] = copy(msg) # record error message
-                self.failed_filters_id.append(j) # add filter it list of failed filters
+                self.filter_error(action=a, activity='predict', error_type=', LinAlgError. ')
+            except:
+                self.filter_error(action=a, activity='predict', error_type=', Unknown. ')
             self.x_filter[self.i, j] = np.copy(self.filters[j].x) # update filter mean history
             self.P_filter[self.i, j] = np.copy(self.filters[j].P) # update covariance mean history
         """update with observation"""
         if self.i % self.update_interval == 0:
-            try:
-                if not(a in self.failed_filters_id):
-                    hx_kwargs = {"trans_matrix": self.trans_matrix[self.i], "observer_itrs": self.obs_itrs}
-                    obs_true = hx(self.x_true[self.i][a], **hx_kwargs)
-                    self.filters[a].update(obs_true + self.z_noise[self.i], **hx_kwargs)
-            except np.linalg.LinAlgError:
-                self.filters[a].x = np.copy(self.x_failed)
-                self.filters[a].P = np.copy(self.P_failed)
-                msg = ["".join(['Failed on update step ', str(self.i-1), ', sigma points not positive definite. ',
-                                str(np.round(error_failed(state=self.x_true[self.i-1, a], x=self.x_filter[self.i-1, a],
-                                                          P=np.diag(self.P_filter[self.i-1, a])), 2))])]
-                self.failed_filters_msg[a] = copy(msg) # record error message
-                self.failed_filters_id.append(a) # add filter it list of failed filters
+            if not(a in self.failed_filters_id):
+                hx_kwargs = {"trans_matrix": self.trans_matrix[self.i], "observer_itrs": self.obs_itrs}
+                self.z_true[self.i] = hx(self.x_true[self.i][a], **hx_kwargs)
+                if self.z_true[self.i][1] >= self.obs_limit:
+                    try:
+                        self.filters[a].update(self.z_true[self.i] + self.z_noise[self.i], **hx_kwargs)
+                    except ValueError:
+                        self.filter_error(action=a, activity='update', error_type=', ValueError. ')
+                    except np.linalg.LinAlgError:
+                        self.filter_error(action=a, activity='update', error_type=', LinAlgError. ')
+                    except:
+                        self.filter_error(action=a, activity='update', error_type=', Unknown. ')
             self.x_filter[self.i, a] = np.copy(self.filters[a].x) # update filter mean history
             self.P_filter[self.i, a] = np.copy(self.filters[a].P) # update covariance mean history
         """Observations and Reward"""
@@ -180,3 +178,12 @@ class SSA_Tasker_Env(gym.Env):
     def plot_sigma_delta(self, style=None, yscale='log'):
         plot_delta_sigma(sigma_pos=self.sigma_pos, sigma_vel=self.sigma_vel, delta_pos=self.delta_pos,
                          delta_vel=self.delta_vel, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale)
+
+    def filter_error(self, action, activity, error_type):
+        self.filters[action].x = np.copy(self.x_failed)
+        self.filters[action].P = np.copy(self.P_failed)
+        msg = ["".join(['Failed on ', activity, ' step ', str(self.i-1), error_type,
+                        str(np.round(error_failed(state=self.x_true[self.i-1, action], x=self.x_filter[self.i-1, action],
+                                                  P=np.diag(self.P_filter[self.i-1, action])), 2))])]
+        self.failed_filters_msg[action] = copy(msg) # record error message
+        self.failed_filters_id.append(action) # add filter it list of failed filters

@@ -7,7 +7,7 @@ from poliastro.core.elements import coe2rv
 from envs.transformations import _itrs2azel
 from poliastro.bodies import Earth
 import functools
-from scipy.integrate import DOP853, solve_ivp
+from scipy.integrate import DOP853, solve_ivp, RK45
 
 k = Earth.k.to_value(u.m**3/u.s**2)
 RE = Earth.R_mean.to_value(u.m)
@@ -110,7 +110,7 @@ def fx_xyz_mikkola(x, dt, k=k):
     return x_post
 
 
-def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwargs):
+def fx_xyz_cowell(x, dt, k=k, rtol=1e-3, *, events=None, ad=ad_none, **ad_kwargs):
     u0 = x
     tof = dt
 
@@ -121,8 +121,8 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
         (0, tof),
         u0,
         rtol=rtol,
-        atol=1e-12,
-        method=DOP853,
+        atol=1e-6,
+        method=RK45,
         dense_output=True,
         events=events,
     )
