@@ -17,7 +17,9 @@ from poliastro.frames import Planes
 from poliastro.core.elements import coe2rv
 from poliastro.core.propagation import markley
 
-from envs.filterjit import UnscentedKalmanFilter, Q_discrete_white_noise, MerweScaledSigmaPoints
+from filterpy.kalman import MerweScaledSigmaPoints
+from filterpy.kalman.UKF import UnscentedKalmanFilter
+from filterpy.common import Q_discrete_white_noise
 
 #from astropy.time import Time
 import matplotlib.pyplot as plt # used for all plots
