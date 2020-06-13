@@ -33,7 +33,7 @@ class SSA_Tasker_Env(gym.Env):
 
     def __init__(self, steps=480, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
                  obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
-                 z_sigma=(1, 1, 1000), q_sigma=0.001, update_interval=1, orbits=np.load('envs/sample_orbits.npy'),
+                 z_sigma=(1, 1, 1000), q_sigma=0.001, update_interval=1, orbits=np.load('sample_orbits.npy'),
                  fx=fx_xyz_markley, hx=hx_aer_kwargs):
         super(SSA_Tasker_Env, self).__init__()
         """Simulation configuration"""
@@ -213,9 +213,8 @@ class SSA_Tasker_Env(gym.Env):
                 self.nees[i, j] = delta[i, j] @ np.linalg.inv(self.P_filter[i, j]) @ delta[i, j]
         return np.mean(self.nees)
 
-    @property
     def failed_filters(self):
-        if self.failed_filters_id == []:
+        if not self.failed_filters_id:
             print("No failed Objects")
         else:
             for rso_id in self.failed_filters_id:
