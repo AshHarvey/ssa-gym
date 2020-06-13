@@ -110,7 +110,7 @@ def fx_xyz_mikkola(x, dt, k=k):
     return x_post
 
 
-def fx_xyz_cowell(x, dt, k=k, rtol=1e-3, *, events=None, ad=ad_none, **ad_kwargs):
+def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwargs):
     u0 = x
     tof = dt
 
@@ -121,8 +121,8 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-3, *, events=None, ad=ad_none, **ad_kwargs
         (0, tof),
         u0,
         rtol=rtol,
-        atol=1e-6,
-        method=RK45,
+        atol=1e-12,
+        method=DOP853,
         dense_output=True,
         events=events,
     )

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from datetime import timedelta
 import numpy as np
+from scipy.special import erf
 
 
 @njit
@@ -81,8 +82,9 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
-    pos_lims = (np.min((sigma_pos, delta_pos))*0.9, np.max((sigma_pos, delta_pos))*1.1)
-    vel_lims = (np.min((sigma_vel, delta_vel))*0.9, np.max((sigma_vel, delta_vel))*1.1)
+    pos_lims = (1e1, 1e7)
+    vel_lims = (1e-2, 1e4)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
 
     # Uncertainty in Position
     plt.subplot(221)
@@ -91,6 +93,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(pos_lims)
+    plt.xlim(tim_lim)
     plt.title('Uncertainty in Position')
     plt.grid(True)
 
@@ -101,6 +104,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(vel_lims)
+    plt.xlim(tim_lim)
     plt.title('Uncertainty in Velocity')
     plt.grid(True)
 
@@ -111,6 +115,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(pos_lims)
+    plt.xlim(tim_lim)
     plt.title('Error in Position')
     plt.grid(True)
 
@@ -121,6 +126,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(vel_lims)
+    plt.xlim(tim_lim)
     plt.title('Error in Velocity')
     plt.grid(True)
 
@@ -195,5 +201,59 @@ def plot_results(errors_position, errors_velocity, filter_error_position, filter
     labels = l1[:2]
     labels += [l2[0]]
     ax.legend(handles=handles, labels=labels, loc='upper left')
+
+    plt.show()
+
+
+def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
+    n = len(rewards)
+    t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
+
+    # plot with Reward over Time
+    plt.figure()
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
+    reward_lim = (np.min(rewards * (rewards > np.min(rewards)))*1.05, 0)
+
+    # Reward over Time
+    plt.plot(t, rewards, linewidth=1)
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(reward_lim)
+    plt.xlim(tim_lim)
+    plt.title('Reward over Time')
+    plt.grid(True)
+
+    plt.show()
+
+
+def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
+    o, m, n = rewards.shape # n: time steps, m: episodes, o: agents
+    t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
+
+    q = (100-erf(sigma/np.sqrt(2))*100, 50, erf(sigma/np.sqrt(2))*100)
+
+    performance = np.percentile(a=rewards[:, :, :], q=q, axis=1) # 3, o, n
+
+    # plot with Reward over Time
+    plt.figure()
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
+
+    for k in range(o):
+        plt.fill_between(x=t, y1=performance[0, k, :], y2=performance[2, k, :], alpha=0.25)
+        plt.plot(t, performance[1, k, :], linewidth=1)
+
+    plt.yscale(yscale)
+    plt.gcf().autofmt_xdate()
+    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.xlim(tim_lim)
+    plt.title('Performance of Agents over Time')
+    plt.grid(True)
 
     plt.show()
