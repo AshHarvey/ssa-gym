@@ -73,7 +73,7 @@ def obs_filter_object_x_diagP(filters):
     return np.nan_to_num(obs,nan=99999, posinf=99999)
 
 
-def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=None, yscale='log'):
+def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=None, yscale='log', ylim='max'):
     n, m = sigma_pos.shape
     t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
 
@@ -82,9 +82,17 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
-    pos_lims = (1e1, 1e7)
-    vel_lims = (1e-2, 1e4)
-    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
+    if ylim == 'max':
+        pos_lims_max = np.max([delta_pos, sigma_pos])
+    else:
+        pos_lims_max = 1e7
+    pos_lims = (1e1, pos_lims_max)
+    if ylim == 'max':
+        pos_lims_max = np.max([delta_vel, sigma_vel])
+    else:
+        pos_lims_max = 1e4
+    vel_lims = (1e-2, pos_lims_max)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
 
     # Uncertainty in Position
     plt.subplot(221)
@@ -214,7 +222,7 @@ def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
-    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
     reward_lim = (np.min(rewards * (rewards > np.min(rewards)))*1.05, 0)
 
     # Reward over Time
@@ -243,7 +251,7 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
-    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/2880)
+    tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
 
     for k in range(o):
         plt.fill_between(x=t, y1=performance[0, k, :], y2=performance[2, k, :], alpha=0.25)
@@ -254,6 +262,50 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.xlim(tim_lim)
     plt.title('Performance of Agents over Time')
+    plt.grid(True)
+
+    plt.show()
+
+
+def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0):
+    n, m = nees.shape
+
+    if axis == 0:
+        x = np.array(range(m))
+    elif axis == 1:
+        x = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
+
+    # plot with Reward over Time
+    plt.figure()
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+
+    if axis == 0:
+        x_lim = (0, m-1)
+    elif axis == 1:
+        x_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
+
+    anees = np.mean(nees, axis=axis)
+
+    y_lim = (np.min(anees), np.max(anees))
+
+    # ANEES by RSO or Time
+    if axis == 0:
+        plt.bar(x, anees)
+        plt.axhline(y=1, linewidth=1, color='k', xmin=x_lim[0], xmax=x_lim[1])
+    elif axis == 1:
+        plt.plot(x, anees, linewidth=1)
+    plt.yscale(yscale)
+    if axis == 1:
+        plt.gcf().autofmt_xdate()
+        plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.ylim(y_lim)
+    plt.xlim(x_lim)
+    if axis == 0:
+        plt.title('ANEES by RSO')
+    elif axis == 1:
+        plt.title('ANEES over Time')
     plt.grid(True)
 
     plt.show()

@@ -22,8 +22,26 @@ def agent_visible_greedy(obs, env):
     visible = env.visible_objects
     if not np.any(env.visible_objects):
         return env.action_space.sample()
-    trace = np.sum(obs[visible, 6:], axis=1)
-    visible_id = np.argmax(trace)
+    visible_trace = np.sum(obs[visible, 6:], axis=1)
+    visible_id = np.argmax(visible_trace)
+    return visible[visible_id]
+
+
+def agent_pos_error_greedy(obs, env):
+    visible = env.visible_objects
+    if not np.any(env.visible_objects):
+        return env.action_space.sample()
+    visible_positional_error = env.delta_pos[env.i, visible]
+    visible_id = np.argmax(visible_positional_error)
+    return visible[visible_id]
+
+
+def agent_vel_error_greedy(obs, env):
+    visible = env.visible_objects
+    if not np.any(env.visible_objects):
+        return env.action_space.sample()
+    visible_velocity_error = env.delta_vel[env.i, visible]
+    visible_id = np.argmax(visible_velocity_error)
     return visible[visible_id]
 
 

@@ -7,7 +7,7 @@ from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
 from envs.transformations import arcsec2rad, deg2rad, lla2itrs, gcrs2irts_matrix_b, get_eops, itrs2azel
 from envs.dynamics import fx_xyz_markley, hx_aer_kwargs
-from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards
+from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 import gym
 from gym.utils import seeding
 from copy import copy
@@ -26,6 +26,8 @@ seconds: s
 unitless: u
 """
 
+sample_orbits = np.load('envs/sample_orbits.npy')
+
 
 class SSA_Tasker_Env(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -33,7 +35,7 @@ class SSA_Tasker_Env(gym.Env):
 
     def __init__(self, steps=480, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
                  obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
-                 z_sigma=(1, 1, 1000), q_sigma=0.001, update_interval=1, orbits=np.load('sample_orbits.npy'),
+                 z_sigma=(1, 1, 1000), q_sigma=0.001, P_0=None, R=None,  update_interval=1, orbits=sample_orbits,
                  fx=fx_xyz_markley, hx=hx_aer_kwargs):
         super(SSA_Tasker_Env, self).__init__()
         """Simulation configuration"""
@@ -61,8 +63,14 @@ class SSA_Tasker_Env(gym.Env):
         # variables for the filter
         x_dim = 6
         z_dim = 3
-        self.P_0 = np.copy(np.diag(self.x_sigma**2)) # Assumed covariance of the estimates at simulation start
-        self.R = np.diag(self.z_sigma**2) # Noise added to the filter during observation updates
+        if P_0 is None:
+            self.P_0 = np.copy(np.diag(self.x_sigma**2)) # Assumed covariance of the estimates at simulation start
+        else:
+            self.P_0 = np.copy(P_0)
+        if R is None:
+            self.R = np.diag(self.z_sigma**2) # Noise added to the filter during observation updates
+        else:
+            self.R = np.copy(R)
         self.x_true = np.empty(shape=(self.n, self.m, x_dim)) # means for all objects at each time step
         self.x_filter = np.empty(shape=(self.n, self.m, x_dim)) # means for all objects at each time step
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim)) # covariances for all objects at each time step
@@ -90,6 +98,7 @@ class SSA_Tasker_Env(gym.Env):
         P_failed_bottom = np.column_stack((P_failed_vel @ P_failed_pos, P_failed_vel @ P_failed_vel))
         self.P_failed = np.row_stack((P_failed_top, P_failed_bottom)) # failed filter will be set to this value
         self.nees = np.empty((self.n, self.m)) # used for normalized estimation error squared (NEES) and its average
+        self.visibility = [] # used to store a log of visible objects at each time step
         """Define Gym spaces"""
         self.action_space = gym.spaces.Discrete(self.m) # the action is choosing which RSO to look at
         self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m, 12)), high=np.tile(np.inf, (self.m, 12)),
@@ -105,8 +114,6 @@ class SSA_Tasker_Env(gym.Env):
     
     def reset(self):
         """reset filter"""
-        self.P_0 = np.copy(np.diag(self.x_sigma**2)) # Assumed covariance of the estimates at simulation start
-        self.R = np.diag(self.z_sigma**2) # Noise added to the filter during observation updates
         self.x_true[:], self.x_filter[:], self.P_filter[:], self.obs[:], self.z_true[:] = 0, 0, 0, 0, 0 # Clear history
         """initialize RSO"""
         self.filters = []
@@ -124,8 +131,9 @@ class SSA_Tasker_Env(gym.Env):
         for i in range(self.n):
             self.z_noise[i] = self.np_random.normal(size=3)*self.z_sigma
         """Reset variables for tracking environment performance"""
+        # blank out all tracking variables
         self.delta_pos[:], self.delta_vel[:], self.sigma_pos[:], self.sigma_vel[:] = np.nan, np.nan, np.nan, np.nan
-        self.scores[:], self.actions[:], self.failed_filters_id = np.nan, np.nan, [] # blank out all tracking variables
+        self.scores[:], self.actions[:], self.failed_filters_id, self.visibility = np.nan, np.nan, [], []
         self.failed_filters_msg = ["None"]*self.m # reset list for failure messages
         """Observations and Reward"""
         self.obs[0] = obs_fn(self.x_filter[0], self.P_filter[0]) # set initial observation based on x and P
@@ -199,9 +207,18 @@ class SSA_Tasker_Env(gym.Env):
 
     @property
     def visible_objects(self):
-        az = itrs2azel(self.obs_itrs, self.x_true[self.i, :, :3])[:, 1]
+        az = itrs2azel(self.obs_itrs, self.x_true[self.i, :, :3]@self.trans_matrix[self.i])[:, 1]
         viz = np.where(az >= self.obs_limit)[0]
         return viz
+
+
+    @property
+    def object_visibility(self):
+        itrs = np.array([self.x_true[i, :, :3]@self.trans_matrix[i] for i in range(self.n)])
+        az = [itrs2azel(self.obs_itrs, itrs[i])[:, 1] for i in range(self.n)]
+        viz = az >= self.obs_limit
+        return viz
+
 
     @property
     def anees(self):
@@ -220,9 +237,18 @@ class SSA_Tasker_Env(gym.Env):
             for rso_id in self.failed_filters_id:
                 print(self.failed_filters_msg[rso_id])
 
-    def plot_sigma_delta(self, style=None, yscale='log'):
-        plot_delta_sigma(sigma_pos=self.sigma_pos, sigma_vel=self.sigma_vel, delta_pos=self.delta_pos,
-                         delta_vel=self.delta_vel, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale)
+    def plot_sigma_delta(self, style=None, yscale='log', objects=np.array([]), ylim='max'):
+        if objects.shape[0] == 0:
+            plot_delta_sigma(sigma_pos=self.sigma_pos, sigma_vel=self.sigma_vel, delta_pos=self.delta_pos,
+                             delta_vel=self.delta_vel, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale, ylim=ylim)
+        else:
+            plot_delta_sigma(sigma_pos=self.sigma_pos[:, objects], sigma_vel=self.sigma_vel[:, objects],
+                             delta_pos=self.delta_pos[:, objects], delta_vel=self.delta_vel[:, objects], dt=self.dt,
+                             t_0=self.t_0, style=style, yscale=yscale, ylim=ylim)
 
     def plot_rewards(self, style=None, yscale='symlog'):
         plot_rewards(rewards=self.rewards, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale)
+
+    def plot_anees(self, axis=0):
+        _ = self.anees
+        plot_nees(self.nees, self.dt, self.t_0, style=None, yscale='symlog', axis=axis)
