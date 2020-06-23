@@ -3,7 +3,7 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 from astropy._erfa import DAYSEC, DAS2R, DMAS2R, DPI, eform
-from astropy._erfa import c2t06a, cal2jd, gc2gd, dat, gd2gc, xys06a, c2ixys, era00, cr, rz, rxr, pom00, sp00
+from astropy import _erfa as erfa
 from numba import njit
 
 a, f = eform(1)  # WGS84 ellipsoid parameters
@@ -44,7 +44,7 @@ def gcrs2irts_matrix_a(t, eop):
         jd, ttb, utb, xp, dx06, yp, dy06 = utc2cel06a_parameters(tt, eop)
 
         # celestial to terrestrial transformation matrix
-        c2t06a_mat = c2t06a(tta=jd, ttb=ttb, uta=jd, utb=utb, xp=xp, yp=yp)
+        c2t06a_mat = erfa.c2t06a(tta=jd, ttb=ttb, uta=jd, utb=utb, xp=xp, yp=yp)
 
         matrix.append(c2t06a_mat)
     if len(matrix) == 1:
@@ -78,10 +78,10 @@ def utc2cel06a_parameters(t, eop, iau55=False):
     second = t.second
 
     # TT (MJD). */
-    djmjd0, date = cal2jd(iy=year, im=month, id=day)
+    djmjd0, date = erfa.cal2jd(iy=year, im=month, id=day)
     jd = djmjd0 + date
     day_frac = (60.0 * (60 * hour + minute) + second) / DAYSEC
-    dat_s = dat(year, month, day, day_frac)
+    dat_s = erfa.dat(year, month, day, day_frac)
     ttb = dat_s / DAYSEC + 32.184 / DAYSEC
 
     # Polar motion (arcsec->radians)
@@ -145,11 +145,11 @@ def gcrs2irts_matrix_b(t, eop):
         second = ti.second
 
         # TT (MJD). */
-        djmjd0, date = cal2jd(iy=year, im=month, id=day)
+        djmjd0, date = erfa.cal2jd(iy=year, im=month, id=day)
         # jd = djmjd0 + date
         day_frac = (60.0 * (60 * hour + minute) + second) / DAYSEC
         utc = date + day_frac
-        Dat = dat(year, month, day, day_frac)
+        Dat = erfa.dat(year, month, day, day_frac)
         tai = utc + Dat / DAYSEC
         tt = tai + 32.184 / DAYSEC
 
@@ -159,7 +159,7 @@ def gcrs2irts_matrix_b(t, eop):
         # ut1 = date + tut
 
         # CIP and CIO, IAU 2006/2000A. */
-        x, y, s = xys06a(djmjd0, tt)
+        x, y, s = erfa.xys06a(djmjd0, tt)
 
         # X, Y offsets
         dx06 = (eop["dX"][date] * (1 - day_frac) + eop["dX"][date + 1] * day_frac) * DAS2R
@@ -170,22 +170,22 @@ def gcrs2irts_matrix_b(t, eop):
         y = y + dy06
 
         # GCRS to CIRS matrix. */
-        rc2i = c2ixys(x, y, s)
+        rc2i = erfa.c2ixys(x, y, s)
 
         # Earth rotation angle. */
-        era = era00(djmjd0 + date, tut)
+        era = erfa.era00(djmjd0 + date, tut)
 
         # Form celestial-terrestrial matrix (no polar motion yet). */
-        rc2ti = cr(rc2i)
-        rc2ti = rz(era, rc2ti)
+        rc2ti = erfa.cr(rc2i)
+        rc2ti = erfa.rz(era, rc2ti)
 
         # Polar motion matrix (TIRS->ITRS, IERS 2003). */
         xp = (eop["x"][date] * (1 - day_frac) + eop["x"][date + 1] * day_frac) * DAS2R
         yp = (eop["y"][date] * (1 - day_frac) + eop["y"][date + 1] * day_frac) * DAS2R
-        rpom = pom00(xp, yp, sp00(djmjd0, tt))
+        rpom = erfa.pom00(xp, yp, erfa.sp00(djmjd0, tt))
 
         # Form celestial-terrestrial matrix (including polar motion). */
-        rc2it = rxr(rpom, rc2ti)
+        rc2it = erfa.rxr(rpom, rc2ti)
         matrix.append(rc2it)
     if len(matrix) == 1:
         matrix = matrix[0]
@@ -463,7 +463,7 @@ def itrs2lla(xyz):
         lla is a numpy array of dimension [3] or [n,3], where 3 is the lon (radians),lat (radians), height (meters) of
             the geodetic coordinates of n different sets of coordinates
     """
-    lla = np.array(gc2gd(1, xyz), dtype=np.float64)
+    lla = np.array(erfa.gc2gd(1, xyz), dtype=np.float64)
     lla = lla.T
     return lla
 
@@ -479,7 +479,7 @@ def lla2itrs(lla):
             meters of n different sets of coordinates
     """
     lla = np.atleast_2d(lla)
-    xyz = np.array(gd2gc(1, lla[:, 0], lla[:, 1], lla[:, 2]), dtype=np.float64)
+    xyz = np.array(erfa.gd2gc(1, lla[:, 0], lla[:, 1], lla[:, 2]), dtype=np.float64)
     if xyz.size == 3:
         xyz = xyz[0]
     return xyz

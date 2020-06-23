@@ -7,6 +7,7 @@ from poliastro.core.elements import coe2rv
 from envs.transformations import _itrs2azel
 from poliastro.bodies import Earth
 import functools
+from astropy import _erfa as erfa
 from scipy.integrate import DOP853, solve_ivp, RK45
 
 k = Earth.k.to_value(u.m**3/u.s**2)
@@ -145,11 +146,11 @@ def hx_xyz(x):
 
 
 @njit
-def hx_aer_erfa(x_gcrs, *hx_args):
+def hx_aer_erfa(x_gcrs, trans_matrix, observer_itrs):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
-    trans_matrix = hx_args[0][0]
-    observer_itrs = hx_args[0][1]
+    #trans_matrix = hx_args[0][0]
+    #observer_itrs = hx_args[0][1]
     x_itrs = trans_matrix @ x_gcrs[:3]
     aer = _itrs2azel(observer_itrs, x_itrs)
     return aer
@@ -207,7 +208,7 @@ def residual_z_aer(a, b):
 
 @njit
 def residual_xyz(a, b):
-    c = np.subtract(a,b)
+    c = np.subtract(a, b)
     return c
 
 
@@ -227,10 +228,36 @@ def mean_z_aer(sigmas, Wm):
         z[2] = z[2] + s[2] * Wm[i]
     z[0] = np.arctan2(sum_sin_az, sum_cos_az)
     z[1] = np.arctan2(sum_sin_el, sum_cos_el)-np.pi
-    while z[0] > 2*np.pi or z[0] < 0:
-        z[0] = z[0] - np.sign(z[0])*np.pi*2
     while z[1] > np.pi or z[1] < -np.pi:
         z[1] = z[1] - np.sign(z[1])*np.pi*2
+    if z[1] > np.pi/2 or z[1] < -np.pi/2:
+        z[1] = np.sign(z[1])*np.pi - z[1]
+        z[0] = z[0] - np.pi
+    while z[0] > 2*np.pi or z[0] < 0:
+        z[0] = z[0] - np.sign(z[0])*np.pi*2
+    return z
+
+
+def mean_z_unit_vector(sigmas, Wm):
+    n, z_dim = sigmas.shape
+    z = np.empty(3)
+    sigmas_u = np.empty((n, z_dim-1))
+    for i in range(len(sigmas)):
+        sigmas_u[i] = erfa.s2c(sigmas[0, 0], sigmas[0, 1])[:2]
+        
+    z_mean_u = np.empty(z_dim)
+    z_mean_u[:2] = np.average(sigmas_u, axis=0, weights=Wm)
+    z_mean_u[2] = np.average(sigmas[:, 2], weights=Wm)
+    z[:2] = erfa.c2s(z_mean_u)
+    z[2] = z_mean_u[2]
+
+    while z[1] > np.pi or z[1] < -np.pi:
+        z[1] = z[1] - np.sign(z[1])*np.pi*2
+    if z[1] > np.pi/2 or z[1] < -np.pi/2:
+        z[1] = np.sign(z[1])*np.pi - z[1]
+        z[0] = z[0] - np.pi
+    while z[0] > 2*np.pi or z[0] < 0:
+        z[0] = z[0] - np.sign(z[0])*np.pi*2
     return z
 
 

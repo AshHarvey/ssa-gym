@@ -73,25 +73,35 @@ def obs_filter_object_x_diagP(filters):
     return np.nan_to_num(obs,nan=99999, posinf=99999)
 
 
-def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=None, yscale='log', ylim='max'):
+def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=None, yscale='log', ylim='max',
+                     title=None, save_path=None, display=True):
     n, m = sigma_pos.shape
     t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
 
     # plot with errors and uncertainties
-    plt.figure()
+    fig = plt.figure()
+    if title is not None:
+        fig.suptitle(title)
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
     if ylim == 'max':
         pos_lims_max = np.max([delta_pos, sigma_pos])
+        pos_lims_min = np.max([np.min([delta_pos, sigma_pos]), 1e-3])
+        pos_lims = (pos_lims_min, pos_lims_max)
     else:
-        pos_lims_max = 1e7
-    pos_lims = (1e1, pos_lims_max)
+        pos_lims_max = 1e6
+        pos_lims_min = 1e-3
+        pos_lims = (pos_lims_min, pos_lims_max)
     if ylim == 'max':
-        pos_lims_max = np.max([delta_vel, sigma_vel])
+        vel_lims_max = np.max([delta_vel, sigma_vel])
+        vel_lims_min = np.max([np.min([delta_vel, sigma_vel]), 1e-4])
+        vel_lims = (vel_lims_min, vel_lims_max)
     else:
-        pos_lims_max = 1e4
-    vel_lims = (1e-2, pos_lims_max)
+        vel_lims_max = 1e4
+        vel_lims_min = 1e-4
+        vel_lims = (vel_lims_min, vel_lims_max)
+
     tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
 
     # Uncertainty in Position
@@ -101,8 +111,9 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(pos_lims)
+    plt.ylabel('$\sqrt{\sum (P_{i,j})}$ where i = j')
     plt.xlim(tim_lim)
-    plt.title('Uncertainty in Position')
+    plt.title(r'Position ($m$)')
     plt.grid(True)
 
     # Uncertainty in Velocity
@@ -113,7 +124,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(vel_lims)
     plt.xlim(tim_lim)
-    plt.title('Uncertainty in Velocity')
+    plt.title(r'Velocity ($\frac{m}{s}$)')
     plt.grid(True)
 
     # Error in Position
@@ -123,8 +134,9 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gcf().autofmt_xdate()
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(pos_lims)
+    plt.ylabel('$\sqrt{\sum{(x_i-\hat{x}_i)^2}}$')
     plt.xlim(tim_lim)
-    plt.title('Error in Position')
+    plt.xlabel('Simulation Time (HH:MM)')
     plt.grid(True)
 
     # Error in Velocity
@@ -135,12 +147,15 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(vel_lims)
     plt.xlim(tim_lim)
-    plt.title('Error in Velocity')
+    plt.xlabel('Simulation Time (HH:MM)')
     plt.grid(True)
 
-    # plt.subplots_adjust(top=0.92, bottom=0.08, left=0.10, right=0.95, hspace=0.25, wspace=0.35)
-
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
 
 
 def plot_results(errors_position, errors_velocity, filter_error_position, filter_error_velocity, t, title=None):
@@ -267,7 +282,7 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     plt.show()
 
 
-def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0):
+def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0, title=None, save_path=None, display=True):
     n, m = nees.shape
 
     if axis == 0:
@@ -276,7 +291,9 @@ def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0):
         x = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
 
     # plot with Reward over Time
-    plt.figure()
+    fig = plt.figure()
+    if title is not None:
+        fig.suptitle(title)
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
@@ -294,18 +311,54 @@ def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0):
     if axis == 0:
         plt.bar(x, anees)
         plt.axhline(y=1, linewidth=1, color='k', xmin=x_lim[0], xmax=x_lim[1])
+        plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
+        plt.xlabel('RSO ID')
+        plt.title('Averaged Normalized Estimation Error Squared (ANEES) by RSO')
     elif axis == 1:
         plt.plot(x, anees, linewidth=1)
-    plt.yscale(yscale)
-    if axis == 1:
+        plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
         plt.gcf().autofmt_xdate()
         plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+        plt.xlabel('Simulation Time (HH:MM)')
+        plt.title('Averaged Normalized Estimation Error Squared (ANEES) over Time')
+    plt.yscale(yscale)
     plt.ylim(y_lim)
     plt.xlim(x_lim)
-    if axis == 0:
-        plt.title('ANEES by RSO')
-    elif axis == 1:
-        plt.title('ANEES over Time')
+    plt.xlabel('Simulation Time (HH:MM)')
     plt.grid(True)
 
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_histogram(values, bins=None, style=None, title='Histogram of Errors (%)', xlabel=r'$\sqrt{\sum{(x_i-\hat{x}_i)^2}}$',
+                   save_path=None, display=True):
+    values = values.flatten()
+    n, = values.shape
+
+    # plot with Reward over Time
+    fig = plt.figure()
+    if title is not None:
+        fig.suptitle(title)
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+    if bins is 'default':
+        bins = [0, 100, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000]
+
+    plt.title(title)
+    plt.xlabel(xlabel)
+
+    plt.gca().yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=n))
+    plt.hist(x=values, bins=bins)
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()

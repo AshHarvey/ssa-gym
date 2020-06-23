@@ -6,7 +6,7 @@ from filterpy.kalman.UKF import UnscentedKalmanFilter as UKF
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
 from envs.transformations import arcsec2rad, deg2rad, lla2itrs, gcrs2irts_matrix_b, get_eops, itrs2azel
-from envs.dynamics import fx_xyz_markley, hx_aer_kwargs
+from envs.dynamics import fx_xyz_farnocchia, hx_aer_kwargs, mean_z_unit_vector, residual_z_aer
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 import gym
 from gym.utils import seeding
@@ -33,10 +33,11 @@ class SSA_Tasker_Env(gym.Env):
     metadata = {'render.modes': ['human']}
     RE = Earth.R_mean.to_value(u.m) # radius of earth
 
-    def __init__(self, steps=480, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
+    def __init__(self, steps=2880, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
                  obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
                  z_sigma=(1, 1, 1000), q_sigma=0.001, P_0=None, R=None,  update_interval=1, orbits=sample_orbits,
-                 fx=fx_xyz_markley, hx=hx_aer_kwargs):
+                 fx=fx_xyz_farnocchia, hx=hx_aer_kwargs, alpha=0.001, beta=2., kappa=3-6, mean_z=mean_z_unit_vector,
+                 residual_z=residual_z_aer):
         super(SSA_Tasker_Env, self).__init__()
         """Simulation configuration"""
         self.t_0 = t_0 # time at start of simulation
@@ -59,6 +60,9 @@ class SSA_Tasker_Env(gym.Env):
         self.eops = get_eops()
         self.fx = fx
         self.hx = hx
+        self.mean_z = mean_z
+        self.residual_z = residual_z
+        self.alpha, self.beta, self.kappa = alpha, beta, kappa # sigma point configuration parameters
         """Prep arrays"""
         # variables for the filter
         x_dim = 6
@@ -110,6 +114,7 @@ class SSA_Tasker_Env(gym.Env):
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
+        self.init_seed = seed
         return [seed]
     
     def reset(self):
@@ -123,7 +128,8 @@ class SSA_Tasker_Env(gym.Env):
             self.x_filter[0][j] = np.copy(self.x_true[0][j] + self.x_noise[j])
             self.P_filter[0][j] = np.copy(self.P_0)
             self.filters.append(UKF(dim_x=6, dim_z=3, dt=self.dt, fx=self.fx, hx=self.hx,
-                                    points=SigmasPoints(n=6, alpha=0.001, beta=2., kappa=3-6)))
+                                    points=SigmasPoints(n=6, alpha=self.alpha, beta=self.beta, kappa=self.kappa),
+                                    z_mean_fn=self.mean_z, residual_z=self.residual_z))
             self.filters[j].x = np.copy(self.x_filter[0][j])
             self.filters[j].P = np.copy(self.P_filter[0][j]) # initial uncertainty
             self.filters[j].R = np.copy(self.R) # uncertainty of each observation
@@ -237,18 +243,29 @@ class SSA_Tasker_Env(gym.Env):
             for rso_id in self.failed_filters_id:
                 print(self.failed_filters_msg[rso_id])
 
-    def plot_sigma_delta(self, style=None, yscale='log', objects=np.array([]), ylim='max'):
+    def plot_sigma_delta(self, style=None, yscale='log', objects=np.array([]), ylim='max', title='default', save_path='default', display=True):
+        if title == 'default':
+            title = 'Filter performance for ' + str(self.m) + ' RSOs, seed = ' + str(self.init_seed)
+        if save_path == 'default':
+            save_path = str(self.m) + 'RSO_' + str(self.init_seed) + 'seed_sigmas_delta_plot'
         if objects.shape[0] == 0:
             plot_delta_sigma(sigma_pos=self.sigma_pos, sigma_vel=self.sigma_vel, delta_pos=self.delta_pos,
-                             delta_vel=self.delta_vel, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale, ylim=ylim)
+                             delta_vel=self.delta_vel, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale, ylim=ylim,
+                             title=title, save_path=save_path, display=display)
         else:
             plot_delta_sigma(sigma_pos=self.sigma_pos[:, objects], sigma_vel=self.sigma_vel[:, objects],
                              delta_pos=self.delta_pos[:, objects], delta_vel=self.delta_vel[:, objects], dt=self.dt,
-                             t_0=self.t_0, style=style, yscale=yscale, ylim=ylim)
+                             t_0=self.t_0, style=style, yscale=yscale, ylim=ylim, title=title, save_path=save_path,
+                             display=display)
 
     def plot_rewards(self, style=None, yscale='symlog'):
         plot_rewards(rewards=self.rewards, dt=self.dt, t_0=self.t_0, style=style, yscale=yscale)
 
-    def plot_anees(self, axis=0):
+    def plot_anees(self, axis=0, title='default', save_path='default', display=True):
         _ = self.anees
-        plot_nees(self.nees, self.dt, self.t_0, style=None, yscale='symlog', axis=axis)
+        if title == 'default':
+            title = 'Filter performance for ' + str(self.m) + ' RSOs, seed = ' + str(self.init_seed)
+        if save_path == 'default':
+            save_path = str(self.m) + 'RSO_' + str(self.init_seed) + 'seed_anees_plot_axis_' + str(axis)
+        plot_nees(self.nees, self.dt, self.t_0, style=None, yscale='symlog', axis=axis, title=title,
+                  save_path=save_path, display=display)
