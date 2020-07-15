@@ -1,5 +1,5 @@
 import numpy as np
-from stable_baselines import A2C
+#from stable_baselines import A2C
 
 
 def agent_naive_greedy(obs, env=None):
@@ -45,9 +45,9 @@ def agent_vel_error_greedy(obs, env):
     return visible[visible_id]
 
 
-model_a2c = A2C.load("a2c_tasker_ts16k") # loads the model to be used in agent_ac2
+'''model_a2c = A2C.load("a2c_tasker_ts16k") # loads the model to be used in agent_ac2
 
 
 def agent_ac2(observation, env, model=model_a2c):
     action, _states = model.predict(observation)
-    return action
+    return action'''
