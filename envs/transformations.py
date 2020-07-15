@@ -1,14 +1,20 @@
 from collections.abc import Iterable
 
 import numpy as np
+from numpy import sin, cos, arctan2 as atan2, arctan as atan, tan, arcsin as asin, arccos as acos, sum, pi, sqrt, radians, float64, array, power, hypot
 import pandas as pd
 from astropy._erfa import DAYSEC, DAS2R, DMAS2R, DPI, eform
 from astropy import _erfa as erfa
 from numba import njit
 
-a, f = eform(1)  # WGS84 ellipsoid parameters
-arcsec2rad = np.pi/648000 # converts arc seconds to radians
-deg2rad = np.pi/180 # converts degrees to radians
+a, f = eform(1)  # WGS84 ellipsoid parameters - semi-major axis, flattening parameter
+e = sqrt(f*(2-f))
+b = (1-f)*a
+arcsec2rad = pi/648000 # converts arc seconds to radians
+deg2rad = pi/180 # converts degrees to radians
+tau = 2*pi
+
+
 
 
 def get_eops():
@@ -107,13 +113,13 @@ def utc2cel06a_parameters(t, eop, iau55=False):
 
     if iau55:
         # CIP offsets wrt IAU 2006/2000A (mas->radians). */
-        dx06 = np.float64(0.1750 * DMAS2R, dtype="f64")
-        dy06 = np.float64(-0.2259 * DMAS2R, dtype="f64")
+        dx06 = float64(0.1750 * DMAS2R, dtype="f64")
+        dy06 = float64(-0.2259 * DMAS2R, dtype="f64")
         # UT1-UTC (s). */
-        dut1 = np.float64(-0.072073685, dtype="f64")
+        dut1 = float64(-0.072073685, dtype="f64")
         # Polar motion (arcsec->radians)
-        xp = np.float64(0.0349282 * DAS2R, dtype="f64")
-        yp = np.float64(0.4833163 * DAS2R, dtype="f64")
+        xp = float64(0.0349282 * DAS2R, dtype="f64")
+        yp = float64(0.4833163 * DAS2R, dtype="f64")
 
     # UT1. */
     utb = day_frac + dut1 / DAYSEC
@@ -214,14 +220,14 @@ def itrs2azel(observer, targets):
     dx = targets[:, 0] - x
     dy = targets[:, 1] - y
     dz = targets[:, 2] - z
-    cos_azimuth = (-z * x * dx - z * y * dy + (x ** 2 + y ** 2) * dz) / np.sqrt(
+    cos_azimuth = (-z * x * dx - z * y * dy + (x ** 2 + y ** 2) * dz) / sqrt(
         (x ** 2 + y ** 2) * (x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    sin_azimuth = (-y * dx + x * dy) / np.sqrt((x ** 2 + y ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    az = np.arctan2(sin_azimuth, cos_azimuth)
-    cos_elevation = (x * dx + y * dy + z * dz) / np.sqrt((x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    el = np.pi / 2 - np.arccos(cos_elevation)
-    sr = np.sqrt(np.sum(np.power((observer - targets), 2).T, axis=0))  # slant range
-    az = az + (az < 0) * np.pi * 2
+    sin_azimuth = (-y * dx + x * dy) / sqrt((x ** 2 + y ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
+    az = atan2(sin_azimuth, cos_azimuth)
+    cos_elevation = (x * dx + y * dy + z * dz) / sqrt((x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
+    el = pi / 2 - acos(cos_elevation)
+    sr = sqrt(sum(power((observer - targets), 2).T, axis=0))  # slant range
+    az = az + (az < 0) * pi * 2
     aer = np.column_stack((az, el, sr))
     return aer
 
@@ -246,15 +252,15 @@ def _itrs2azel(observer, target):
     dx = target[0] - x
     dy = target[1] - y
     dz = target[2] - z
-    cos_azimuth = (-z * x * dx - z * y * dy + (x ** 2 + y ** 2) * dz) / np.sqrt(
+    cos_azimuth = (-z * x * dx - z * y * dy + (x ** 2 + y ** 2) * dz) / sqrt(
         (x ** 2 + y ** 2) * (x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    sin_azimuth = (-y * dx + x * dy) / np.sqrt((x ** 2 + y ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    az = np.arctan2(sin_azimuth, cos_azimuth)
-    cos_elevation = (x * dx + y * dy + z * dz) / np.sqrt((x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
-    el = np.pi / 2 - np.arccos(cos_elevation)
-    sr = np.sqrt(np.sum(np.power((observer - target), 2).T, axis=0))  # slant range
-    az = az + (az < 0) * np.pi * 2
-    aer = np.array([az, el, sr])
+    sin_azimuth = (-y * dx + x * dy) / sqrt((x ** 2 + y ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
+    az = atan2(sin_azimuth, cos_azimuth)
+    cos_elevation = (x * dx + y * dy + z * dz) / sqrt((x ** 2 + y ** 2 + z ** 2) * (dx ** 2 + dy ** 2 + dz ** 2))
+    el = pi / 2 - acos(cos_elevation)
+    sr = sqrt(sum(power((observer - target), 2).T, axis=0))  # slant range
+    az = az + (az < 0) * pi * 2
+    aer = array([az, el, sr])
     return aer
 
 
@@ -326,7 +332,7 @@ def itrs2lla_py(xyz):
     ec2 = 1.0 - e2
     if ec2 <= 0.0:
         print("ec2 in eraGc2gde = ", ec2)
-    ec = np.sqrt(ec2)
+    ec = sqrt(ec2)
     b = a * ec
 
     # Cartesian components. */
@@ -339,7 +345,7 @@ def itrs2lla_py(xyz):
 
     # Longitude. */
     if p2 > 0.0:
-        elong = np.arctan2(y, x)
+        elong = atan2(y, x)
     else:
         elong = 0.0
 
@@ -349,7 +355,7 @@ def itrs2lla_py(xyz):
     # Proceed unless polar case. */
     if p2 > aeps2:
         # Distance from polar axis. */
-        p = np.sqrt(p2)
+        p = sqrt(p2)
 
         # Normalization. */
         s0 = absz / a
@@ -363,7 +369,7 @@ def itrs2lla_py(xyz):
         s02 = s0 * s0
         s03 = s02 * s0
         a02 = c02 + s02
-        a0 = np.sqrt(a02)
+        a0 = sqrt(a02)
         a03 = a02 * a0
         d0 = zc * a03 + e2 * s03
         f0 = pn * a03 - e2 * c03
@@ -374,10 +380,10 @@ def itrs2lla_py(xyz):
         cc = ec * (f0 * f0 - b0 * c0)
 
         # Evaluate latitude and height. */
-        phi = np.arctan(s1 / cc)
+        phi = atan2(s1, cc)  # flag for review - arctan changed to arctan2
         s12 = s1 * s1
         cc2 = cc * cc
-        height = (p * cc + absz * s1 - a * np.sqrt(ec2 * s12 + cc2)) / np.sqrt(s12 + cc2)
+        height = (p * cc + absz * s1 - a * sqrt(ec2 * s12 + cc2)) / sqrt(s12 + cc2)
     else:
         # Exception: pole. */
         phi = DPI / 2.0
@@ -463,7 +469,7 @@ def itrs2lla(xyz):
         lla is a numpy array of dimension [3] or [n,3], where 3 is the lon (radians),lat (radians), height (meters) of
             the geodetic coordinates of n different sets of coordinates
     """
-    lla = np.array(erfa.gc2gd(1, xyz), dtype=np.float64)
+    lla = array(erfa.gc2gd(1, xyz), dtype=float64)
     lla = lla.T
     return lla
 
@@ -479,7 +485,128 @@ def lla2itrs(lla):
             meters of n different sets of coordinates
     """
     lla = np.atleast_2d(lla)
-    xyz = np.array(erfa.gd2gc(1, lla[:, 0], lla[:, 1], lla[:, 2]), dtype=np.float64)
+    xyz = array(erfa.gd2gc(n=1, elong=lla[:, 1], phi=lla[:, 0], height=lla[:, 2]), dtype=float64)
     if xyz.size == 3:
         xyz = xyz[0]
     return xyz
+
+@njit
+def lla2ecef(lla, a=a, f=f, e=e):
+    # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+
+    lat = lla[0] # phi
+    lon = lla[1] # lambda
+    alt = lla[2] # h
+    N = a/np.sqrt(1-e**2*sin(lat)**2) # (eq 2.48)
+    x = (N + alt)*cos(lat)*cos(lon) # (eq 2.135)
+    y = (N + alt)*cos(lat)*sin(lon) # (eq 2.135)
+    z = (N*(1 - e**2) + alt)*sin(lat) # (eq 2.135)
+    ecef = array([x, y, z])
+    return ecef
+
+
+@njit
+def ecef2lla(ecef, a=a, b=b, f=f, e=e):
+    """
+    convert ECEF (meters) to geodetic coordinates
+    Parameters
+    ----------
+    [x,y,z] : array of floats in ECEF coordinate (meters)
+    Returns
+    -------
+    [lat, lon, alt] : array of floats; geodetic latitude (radians), geodetic longitude (radians), altitude (meters)
+    based on:
+    You, Rey-Jer. (2000). Transformation of Cartesian to Geodetic Coordinates without Iterations.
+    Journal of Surveying Engineering. doi: 10.1061/(ASCE)0733-9453
+    """
+    x, y, z = ecef
+    r = sqrt(x ** 2 + y ** 2 + z ** 2)
+    E = sqrt(a ** 2 - b ** 2)
+
+    # eqn. 4a
+    u = sqrt(0.5 * (r ** 2 - E ** 2) + 0.5 * sqrt((r ** 2 - E ** 2) ** 2 + 4 * E ** 2 * z ** 2))
+
+    Q = hypot(x, y)
+
+    huE = hypot(u, E)
+
+    # eqn. 4b
+    if not(Q == 0 or u == 0):
+        Beta = atan(huE / u * z / Q)
+    else:
+        if z >= 0:
+            Beta = pi / 2
+        else:
+            Beta = -pi / 2
+
+    # eqn. 13
+    eps = ((b * u - a * huE + E ** 2) * sin(Beta)) / (a * huE * 1 / cos(Beta) - E ** 2 * cos(Beta))
+
+    Beta += eps
+    # %% final output
+    lat = atan(a / b * tan(Beta))
+
+    lon = atan2(y, x)
+
+    # eqn. 7
+    alt = hypot(z - b * sin(Beta), Q - a * cos(Beta))
+
+    # inside ellipsoid?
+    inside = x ** 2 / a ** 2 + y ** 2 / a ** 2 + z ** 2 / b ** 2 < 1
+    if inside:
+        alt = -alt
+
+    return np.array([lat, lon, alt])
+
+
+@njit
+def aer2uvw(aer):
+    # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
+    # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+    az, el, r = aer
+    u = r*cos(el)*cos(az)       # (eq 2.148)
+    v = r*cos(el)*sin(az)       # (eq 2.148)
+    w = r*sin(el)               # (eq 2.148)
+    enu = array([u, v, w])
+    return enu
+
+
+@njit
+def uvw2aer(uvw):
+    # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
+    # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+    u, v, w = uvw
+    r = sqrt(sum(uvw**2))       # (eq 2.156)
+    az = atan2(v, u)            # (eq 2.154)
+    if az < 0:
+        az = az + tau
+    el = asin(w/r)              # (eq 2.155)
+    aer = array([az, el, r])
+    return aer
+
+
+def rrm2ddm(aer):
+    aer[0] = np.degrees(aer[0])
+    aer[1] = np.degrees(aer[1])
+    return aer
+
+
+@njit
+def ecef2aer(lla_obs, ecef_sat, ecef_obs):
+    # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
+    # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+    lat = lla_obs[0] # phi
+    lon = lla_obs[1] # lambda
+    alt = lla_obs[2] # h
+    trans_uvw_ecef = array([[-sin(lat)*cos(lon),    -sin(lon),  cos(lat)*cos(lon)],
+                            [-sin(lat)*sin(lon),    cos(lon),   cos(lat)*sin(lon)],
+                            [cos(lat),              0,          sin(lat)]])         # (eq 2.153)
+    delta_ecef = ecef_sat - ecef_obs        # (eq 2.149)
+    R_enz = trans_uvw_ecef.T @ delta_ecef   # (eq 2.153)
+    r = sqrt(sum(delta_ecef**2))            # (eq 2.156)
+    az = atan2(R_enz[1], (R_enz[0]))        # (eq 2.154)
+    if az < 0:
+        az = az + 2*pi
+    el = asin(R_enz[2]/r)                   # (eq 2.155)
+    aer = array([az, el, r])
+    return aer
