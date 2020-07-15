@@ -86,16 +86,16 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
         style = 'seaborn-deep'
     mpl.style.use(style)
     if ylim == 'max':
-        pos_lims_max = np.max([delta_pos, sigma_pos])
-        pos_lims_min = np.max([np.min([delta_pos, sigma_pos]), 1e-3])
+        pos_lims_max = 10**np.ceil(np.log10(np.nanmax([delta_pos, sigma_pos])))
+        pos_lims_min = 10**np.floor(np.log10(np.min([np.nanmin([delta_pos, sigma_pos])])))
         pos_lims = (pos_lims_min, pos_lims_max)
     else:
         pos_lims_max = 1e6
         pos_lims_min = 1e-3
         pos_lims = (pos_lims_min, pos_lims_max)
     if ylim == 'max':
-        vel_lims_max = np.max([delta_vel, sigma_vel])
-        vel_lims_min = np.max([np.min([delta_vel, sigma_vel]), 1e-4])
+        vel_lims_max = 10**np.ceil(np.log10(np.nanmax([delta_vel, sigma_vel])))
+        vel_lims_min = 10**np.floor(np.log10(np.min([np.nanmin([delta_vel, sigma_vel])])))
         vel_lims = (vel_lims_min, vel_lims_max)
     else:
         vel_lims_max = 1e4
@@ -156,76 +156,6 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
         plt.show()
     else:
         plt.close()
-
-
-def plot_results(errors_position, errors_velocity, filter_error_position, filter_error_velocity, t, title=None):
-    #create a figure
-    #plt.subplots_adjust(top=0.9)
-    fig = plt.figure(figsize=(24,12),dpi=200)
-    if not(title==None):
-        fig.suptitle(title)
-    ax = fig.add_subplot(121)
-    #plot to first axes
-    palette = sns.color_palette("hls",len(filter_error_position))
-    for j in range(len(filter_error_position)):
-        ax.plot(t,filter_error_position[j],color=palette[j],label="Magnitude of Filter's Position $\sigma$")
-        ax.plot(t,filter_error_velocity[j],color=palette[j],label="Magnitude of Filter's Velocity $\sigma$")
-
-    ax.set_ylabel('Error in meters (log scale)')
-    ax.set_yscale('log')
-    #create twin axes
-
-    ax2=ax.twinx()
-    #plot to twin axes
-    for j in range(len(obs_steps)):
-        ax2.scatter(obs_steps[j], np.degrees(Elevation[j]), s=80, alpha=0.7, color=palette[j], zorder=3, marker='.', label='Observations'); 
-    ax2.set_ylabel('Elevation in Degrees')
-    
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    handles = [copy.copy(h1[1])]
-    handles.append(copy.copy(h1[1]))
-    for handle in handles:
-        color = (0,0,0)
-        handle._color = color
-    handles.append(copy.copy(h2[0]))
-    handles[-1]._edgecolors = np.asarray([[0,0,0,0.3]])
-    handles[-1]._facecolors = np.asarray([[0,0,0,0.3]])
-    labels = l1[:2]
-    labels += [l2[0]]
-    ax.legend(handles=handles, labels=labels, loc='upper left')
-
-
-    ax = fig.add_subplot(122)
-    #plot to first axes
-    for j in range(len(errors_position)):
-        ax.plot(t,errors_position[j],color=palette[j],label="Magnitude of Position Error")
-        ax.plot(t,errors_velocity[j],color=palette[j],label="Magnitude of Velocity Error")
-    ax.set_ylabel('Error in meters (log scale)')
-    ax.set_yscale('log')
-    #create twin axes
-
-    ax2=ax.twinx()
-    #plot to twin axes
-    for j in range(len(obs_steps)):
-        ax2.scatter(obs_steps[j], np.degrees(Elevation[j]), s=80, alpha=0.3, color=palette[j], zorder=3, marker='.', label='Observations'); 
-    ax2.set_ylabel('Elevation in Degrees')
-    
-    h1, l1 = ax.get_legend_handles_labels()
-    h2, l2 = ax2.get_legend_handles_labels()
-    handles = [copy.copy(h1[1])]
-    handles.append(copy.copy(h1[1]))
-    for handle in handles:
-        color = (0,0,0)
-        handle._color = color
-    handles.append(copy.copy(h2[0]))
-    handles[-1]._edgecolors = np.asarray([[0,0,0,0.3]])
-    handles[-1]._facecolors = np.asarray([[0,0,0,0.3]])
-    labels = l1[:2]
-    labels += [l2[0]]
-    ax.legend(handles=handles, labels=labels, loc='upper left')
-
-    plt.show()
 
 
 def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
@@ -350,7 +280,6 @@ def plot_histogram(values, bins=None, style=None, title='Histogram of Errors (%)
     if bins is 'default':
         bins = [0, 100, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000]
 
-    plt.title(title)
     plt.xlabel(xlabel)
 
     plt.gca().yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=n))
