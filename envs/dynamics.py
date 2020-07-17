@@ -135,11 +135,10 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
 
 
 #@jit(['float64[::](float64[::])'],nopython=True)
-@njit
-def hx_xyz(x):
+def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, time=None):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
-    return x[:3]
+    return x_gcrs[:3]
 
 
 def hx_aer_erfa_old(x_gcrs, trans_matrix, observer_lla, time=None, observer_itrs=None):
@@ -191,6 +190,11 @@ def residual_z_aer(a, b):
 def residual_xyz(a, b):
     c = np.subtract(a, b)
     return c
+
+@njit
+def mean_xyz(a, w):
+    b = np.dot(w, a)
+    return b
 
 
 @njit
