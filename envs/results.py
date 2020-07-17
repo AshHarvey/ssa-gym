@@ -168,7 +168,7 @@ def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
         style = 'seaborn-deep'
     mpl.style.use(style)
     tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
-    reward_lim = (np.min(rewards * (rewards > np.min(rewards)))*1.05, 0)
+    reward_lim = (0, 1)
 
     # Reward over Time
     plt.plot(t, rewards, linewidth=1)
@@ -291,3 +291,40 @@ def plot_histogram(values, bins=None, style=None, title='Histogram of Errors (%)
         plt.show()
     else:
         plt.close()
+
+
+def plot_orbit_vis(observations, obs_limit, dt, display=True, save_path=None):
+    fig = plt.figure()
+    plt.ylabel('RSO ID')
+    plt.xlabel('Time Step (' + str(dt) + ' seconds per)')
+    plt.title('Visibility Plot (white = visible)')
+    ax = fig.add_subplot(111)
+    ax.imshow(observations[:, :, 1].T > obs_limit, aspect='auto', cmap=plt.cm.gray, interpolation='nearest')
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_regimes(xy, save_path=None, display=True):
+    plt.figure()
+    plt.scatter(x=xy[:, 0], y=xy[:, 1])
+    for i, ((x, y),) in enumerate(zip(xy)):
+        plt.text(x, y, i, ha="center", va="center")
+
+    plt.ylabel('Eccentricity')
+    plt.xlabel('Altitude at initial time step (kilometers)')
+    plt.title('Orbital Regime of RSOs (by ID)')
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
+
+
+@njit
+def reward_proportional_trinary_true(delta_pos):
+    return np.mean(((delta_pos < 1e4)*1 + (delta_pos < 1e7)*1))/2
