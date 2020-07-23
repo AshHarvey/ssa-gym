@@ -10,10 +10,14 @@ from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix
 from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, residual_z_aer, robust_cholesky
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 from envs.results import plot_histogram, plot_orbit_vis, plot_regimes, reward_proportional_trinary_true
+from envs.results import moving_average_plot, bound_plot
 import gym
 from gym.utils import seeding
 from copy import copy
 import time
+import pandas as pd
+import matplotlib.pyplot as plt
+
 
 """
 Unit Abbreviations: 
@@ -63,9 +67,10 @@ class SSA_Tasker_Env(gym.Env):
         self.i = 0
         """Filter configuration"""
         # standard deviation of noise added to observations [rad, rad, m]
-        if obs_type=='aer':
+        self.obs_type = obs_type
+        if self.obs_type=='aer':
             self.z_sigma = z_sigma * np.array([arcsec2rad, arcsec2rad, 1])
-        elif obs_type=='xyz':
+        elif self.obs_type=='xyz':
             self.z_sigma = z_sigma
         else:
             print('Invalid Observation Type: ' + str(obs_type))
@@ -98,8 +103,10 @@ class SSA_Tasker_Env(gym.Env):
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2)) # observations for all objects at each time step
         self.time = [self.t_0 + timedelta(seconds=self.dt)*i for i in range(self.n)] # time for all time steps
         self.trans_matrix = gcrs2irts_matrix_b(self.time, self.eops) # used for celestial to terrestrial
-        self.z_noise = np.empty(shape=(self.n, z_dim)) # array to contain the noise added to each observation
-        self.z_true = np.empty(shape=(self.n, z_dim)) # array to contain the observations which are made
+        self.z_noise = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the noise added to each observation
+        self.z_true = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the observations which are made
+        self.y = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the innovation of each observation
+        self.S = np.empty(shape=(self.n, self.m, z_dim, z_dim)) # array to contain the innovation covariance
         self.x_noise = np.empty(shape=(self.m, x_dim)) # array to contain the noise added to each RSO
         self.filters = [] # creates a list for ukfs
         # variables for environment performance
@@ -111,7 +118,7 @@ class SSA_Tasker_Env(gym.Env):
         self.rewards = np.empty(self.n) # reward for each time step
         self.failed_filters_id = [] # prep list for failed states
         self.failed_filters_msg = ["None"]*self.m # prep list for failure messages
-        self.actions = np.empty(self.n) # prep variable for keeping track of all previous actions
+        self.actions = np.empty(self.n, dtype=int) # prep variable for keeping track of all previous actions
         self.x_failed = np.array([1e20, 1e20, 1e20, 1e12, 1e12, 1e12]) # failed filter will be set to this value
         self.P_failed = np.diag([1e10, 1e10, 1e10, 1e5, 1e5, 1e5]) # failed filter will be set to this value
         self.nees = np.empty((self.n, self.m)) # used for normalized estimation error squared (NEES) and its average
@@ -137,7 +144,8 @@ class SSA_Tasker_Env(gym.Env):
         s = time.time()
         """reset filter"""
          # Clear history
-        self.x_true[:], self.x_filter[:], self.P_filter[:], self.obs[:], self.z_true[:], self.sigmas_h[:] = [0]*6
+        self.x_true[:], self.x_filter[:], self.P_filter[:], self.obs[:], self.sigmas_h[:] = [0]*5
+        self.z_true[:], self.y[:], self.S[:] = np.nan, np.nan, np.nan
         """initialize RSO"""
         self.filters = []
         for j in range(self.m):
@@ -154,7 +162,8 @@ class SSA_Tasker_Env(gym.Env):
             self.filters[j].R = np.copy(self.R) # uncertainty of each observation
             self.filters[j].Q = np.copy(self.Q) # uncertainty of each prediction
         for i in range(self.n):
-            self.z_noise[i] = self.np_random.normal(size=3)*self.z_sigma
+            for j in range(self.m):
+                self.z_noise[i, j] = self.np_random.normal(size=3)*self.z_sigma
         """Reset variables for tracking environment performance"""
         # blank out all tracking variables
         self.scores[:], self.delta_pos[:], self.delta_vel[:], self.sigma_pos[:], self.sigma_vel[:] = [np.nan]*5
@@ -210,10 +219,12 @@ class SSA_Tasker_Env(gym.Env):
                              "observer_itrs": self.obs_itrs,
                              "observer_lla": self.obs_lla,
                              "time": self.time[self.i]}
-                self.z_true[self.i] = self.hx(self.x_true[self.i][a], **hx_kwargs)
+                self.z_true[self.i, a] = self.hx(self.x_true[self.i][a], **hx_kwargs)
                 if ecef2aer(self.obs_lla, self.x_true[self.i][a][:3], self.obs_itrs)[1] >= self.obs_limit:
                     try:
-                        self.filters[a].update(self.z_true[self.i] + self.z_noise[self.i], **hx_kwargs)
+                        self.filters[a].update(self.z_true[self.i, a] + self.z_noise[self.i, a], **hx_kwargs)
+                        self.y[self.i, a] = np.copy(self.filters[a].y)
+                        self.S[self.i, a] = np.copy(self.filters[a].S)
                         self.sigmas_h[self.i] = np.copy(self.filters[a].sigmas_h)
                         if np.any(np.isnan(self.filters[a].x)):
                             self.filter_error(object_id=a, activity='update', error_type=', update returned nan. ')
@@ -325,14 +336,14 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['plot_rewards'] += e-s
 
-    def plot_anees(self, axis=0, title='default', save_path='default', display=True):
+    def plot_anees(self, axis=None, title='default', save_path='default', display=True, yscale='linear'):
         s = time.time()
         _ = self.anees
         if title == 'default':
             title = 'Filter performance for ' + str(self.m) + ' RSOs, seed = ' + str(self.init_seed)
         if save_path == 'default':
             save_path = str(self.m) + 'RSO_' + str(self.init_seed) + 'seed_anees_plot_axis_' + str(axis) + '.svg'
-        plot_nees(self.nees, self.dt, self.t_0, style=None, yscale='symlog', axis=axis, title=title,
+        plot_nees(self.nees, self.dt, self.t_0, style=None, yscale=yscale, axis=axis, title=title,
                   save_path=save_path, display=display)
         e = time.time()
         self.runtime['plot_anees'] += e-s
@@ -381,5 +392,54 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['plot_visibility'] += e-s
 
+    def plot_NIS(self, save_path=None, display=True):
+        NIS = []
+        for i in range(1, self.n):
+            NIS.append(self.y[i, self.actions[i]] @
+                       np.linalg.inv(self.S[i, int(self.actions[i])]) @
+                       self.y[i, int(self.actions[i])])
+        title = 'Normalized Innovation Squared (NIS) for Observation at Each Time Step'
+        xlabel = 'Time Step'
+        ylabel = '$NIS = (z_{obs}^t-z_{pred}^t)(S^t)^{-1}(z_{obs}^t-z_{pred}^t)$'
+        llabel = 'NIS'
+        moving_average_plot(np.array(NIS), n=20, alpha=0.05, dof=len(self.z_true[0, 0]), style=None, title=title,
+                            xlabel=xlabel, ylabel=ylabel, llabel=llabel, save_path=save_path, display=display)
 
+    def plot_innovation_bounds(self, save_path=None, display=True):
+        innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
+        st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
+
+        title = 'Innovation and Innovation Standard Deviation Bounds'
+        xlabel = 'Time Step'
+        if self.obs_type == 'xyz':
+            ylabel = ['x (meters)', 'y (meters)', 'z (meters)']
+            sharey = True
+        if self.obs_type == 'aer':
+            ylabel = ['Azimuth (radians)', 'Elevation (radians)', 'distance (meters)']
+            sharey = False
+        bound_plot(innovation, st_dev, style=None, title=title, xlabel=xlabel, ylabel=ylabel, yscale='linear', sharey=sharey,
+                   save_path=save_path, display=display)
+
+    @property
+    def innovation_bounds(self):
+        innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
+        st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
+        frac_sigma_bound = np.mean((innovation < st_dev)*(innovation > -st_dev), axis=0)
+        frac_two_sigma_bound = np.mean((innovation < 2*st_dev)*(innovation > -2*st_dev), axis=0)
+        data = np.round(np.stack((frac_sigma_bound, frac_two_sigma_bound))*100, 2)
+        if self.obs_type == 'xyz':
+            df = pd.DataFrame(data, index=['Sigma', 'Two Sigmas'], columns=['x (meters)', 'y (meters)', 'z (meters)'])
+        if self.obs_type == 'aer':
+            df = pd.DataFrame(data, index=['Sigma', 'Two Sigmas'], columns=['Azimuth (radians)', 'Elevation (radians)', 'distance (meters)'])
+        fig = plt.figure(figsize = (8, 2))
+        ax = fig.add_subplot(111)
+
+        ax.table(cellText=df.values,
+                  rowLabels=df.index,
+                  colLabels=df.columns,
+                  loc="center"
+                 )
+        ax.set_title("Innovation Standard Deviation Bounds (Percent)")
+
+        ax.axis("off")
 

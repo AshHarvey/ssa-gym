@@ -5,6 +5,7 @@ import matplotlib as mpl
 from datetime import timedelta
 import numpy as np
 from scipy.special import erf
+from scipy import stats
 
 
 @njit
@@ -212,13 +213,31 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     plt.show()
 
 
-def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0, title=None, save_path=None, display=True):
+def plot_nees(nees, dt, t_0, n_mov_ave=20, alpha=0.05, style=None, yscale='symlog', axis=None, title=None, save_path=None, display=True):
     n, m = nees.shape
+    if alpha is not None:
+        ci = [alpha/2, 1-alpha/2]
+        if axis == 0:
+            cr = stats.chi2.ppf(ci, df=n)/n
+        elif axis == 1 or axis is None:
+            cr = stats.chi2.ppf(ci, df=n*m)/(n*m)
+        if n_mov_ave is not None:
+            cr_bar = stats.chi2.ppf(ci, df=n_mov_ave*m)/(n_mov_ave*m)
 
     if axis == 0:
         x = np.array(range(m))
-    elif axis == 1:
+        anees = np.mean(nees, axis=0)
+        x_lim = (0, m-1)
+    elif axis == 1 or axis is None:
         x = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
+        x_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
+
+        anees = np.mean(nees, axis=1)
+        if n_mov_ave is not None:
+            anees_bar = np.copy(anees)
+            anees_bar[:] = 0
+            for i in range(len(anees)):
+                anees_bar[i] = np.mean(anees[:i+1][-n_mov_ave:])
 
     # plot with Reward over Time
     fig = plt.figure()
@@ -228,23 +247,60 @@ def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0, title=None, sa
         style = 'seaborn-deep'
     mpl.style.use(style)
 
-    if axis == 0:
-        x_lim = (0, m-1)
-    elif axis == 1:
-        x_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
-
-    anees = np.mean(nees, axis=axis)
-
-    y_lim = (np.min(anees), np.max(anees))
-
     # ANEES by RSO or Time
-    if axis == 0:
-        plt.bar(x, anees)
+    if axis is None:
+        y_lim = (np.min(nees), np.max(nees))
+        for i in range(m):
+            plt.scatter(x=x, y=nees[:, i], s=2, alpha=0.5, marker='x')
+        plt.hlines(y=np.mean(nees), xmin=x[0], xmax=x[-1], linewidth=1, color='black',
+                   label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))
+        legend_elements = [mpl.lines.Line2D([0], [0], marker='x', lw=0, color='black', label='NEES (Colored by RSO ID)',
+                                            markerfacecolor='g', markersize=5),
+                           mpl.lines.Line2D([0], [0], color='black', lw=2,
+                                            label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))]
+        if alpha is not None:
+            plt.hlines(y=cr[0], xmin=x[0], xmax=x[-1], color='black', linestyle='--',
+                       label='Confidence Region (overall), alpha = ' + str(alpha))
+            plt.hlines(y=cr[1], xmin=x[0], xmax=x[-1], color='black', linestyle='--')
+            legend_elements.append(mpl.lines.Line2D([0], [0], color='black', lw=2, linestyle='--',
+                                                    label='Overall Confidence Region, alpha = ' + str(alpha)))
+        if n_mov_ave is not None:
+            plt.plot(x, anees_bar, linewidth=1, color='blue', label='ANEES Moving Average, n = ' + str(n_mov_ave))
+            legend_elements.append(mpl.lines.Line2D([0], [0], color='blue', lw=2,
+                                                    label='ANEES Moving Average, n = ' + str(n_mov_ave)))
+            if alpha is not None:
+                plt.hlines(y=cr_bar[0], xmin=x[0], xmax=x[-1], color='blue', linestyle='--',
+                           label='Confidence Region (moving average), alpha = ' + str(alpha))
+                plt.hlines(y=cr_bar[1], xmin=x[0], xmax=x[-1], color='blue', linestyle='--')
+                legend_elements.append(mpl.lines.Line2D([0], [0], color='blue', lw=2, linestyle='--',
+                                                        label='Moving Average Confidence Region, alpha = ' + str(alpha)))
         plt.axhline(y=1, linewidth=1, color='k', xmin=x_lim[0], xmax=x_lim[1])
         plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
+        plt.gcf().autofmt_xdate()
+        plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+        plt.xlabel('Simulation Time (HH:MM)')
+        plt.title('Averaged Normalized Estimation Error Squared (ANEES) by RSO over Time')
+        plt.legend(handles=legend_elements)
+    if axis == 0:
+        y_lim = (np.min(anees), np.max(anees))
+        plt.bar(x, anees)
+        plt.axhline(y=np.mean(anees), linewidth=1, color='black', xmin=x_lim[0], xmax=x_lim[1],
+                    label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))
+        legend_elements = [mpl.lines.Line2D([0], [0], color='blue', lw=2, label='ANEES by RSO'),
+                           mpl.lines.Line2D([0], [0], color='black', lw=2, label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))]
+        if alpha is not None:
+            plt.hlines(y=cr[0], xmin=x[0], xmax=x[-1], color='red', linestyle='--', label='Confidence Region, alpha = ' + str(alpha))
+            plt.hlines(y=cr[1], xmin=x[0], xmax=x[-1], color='red', linestyle='--')
+            legend_elements.append(mpl.lines.Line2D([0], [0], color='red', lw=2, linestyle='--',
+                                                    label='Confidence Region, alpha = ' + str(alpha)))
+        plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
         plt.xlabel('RSO ID')
+        plt.gca().xaxis.set_major_locator(mpl.ticker.MaxNLocator(integer=True))
+        #plt.yticks(np.arange(y_lim[0], y_lim[1], (y_lim[1]-y_lim[0])/10))
         plt.title('Averaged Normalized Estimation Error Squared (ANEES) by RSO')
+        plt.legend(handles=legend_elements)
     elif axis == 1:
+        y_lim = (np.min(anees), np.max(anees))
         plt.plot(x, anees, linewidth=1)
         plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
         plt.gcf().autofmt_xdate()
@@ -252,9 +308,9 @@ def plot_nees(nees, dt, t_0, style=None, yscale='symlog', axis=0, title=None, sa
         plt.xlabel('Simulation Time (HH:MM)')
         plt.title('Averaged Normalized Estimation Error Squared (ANEES) over Time')
     plt.yscale(yscale)
-    plt.ylim(y_lim)
+    if yscale != 'linear':
+        plt.ylim(y_lim)
     plt.xlim(x_lim)
-    plt.xlabel('Simulation Time (HH:MM)')
     plt.grid(True)
 
     if save_path is not None:
@@ -328,3 +384,72 @@ def plot_regimes(xy, save_path=None, display=True):
 @njit
 def reward_proportional_trinary_true(delta_pos):
     return np.mean(((delta_pos < 1e4)*1 + (delta_pos < 1e7)*1))/2
+
+
+def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlabel=None, ylabel=None, llabel=None, save_path=None, display=True):
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+
+    if alpha is not None:
+        ci = [alpha/2, 1-alpha/2]
+        cr = stats.chi2.ppf(ci, df=dof*n)/(n)
+
+    x_bar = np.copy(x)
+    x_bar[:] = 0
+    for i in range(len(x)):
+        x_bar[i] = np.mean(x[:i+1][-n:])
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.scatter(x=range(0, len(x)), y=x, color='red', marker='+', label=llabel)
+    plt.plot(x_bar, color='blue', linestyle='-', linewidth=2, label=str(n) + ' step moving average of ' + llabel)
+    if alpha is not None:
+        plt.plot(np.repeat(cr[1], len(x)), color='blue', linestyle='--', linewidth=2,
+                 label='Moving average confidence region, alpha = ' + str(alpha))
+        plt.plot(np.repeat(cr[0], len(x)), color='blue', linestyle='--', linewidth=2)
+    plt.legend()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
+
+
+def bound_plot(y, st_dev, style=None, title=None, xlabel=None, ylabel=None, yscale='symlog', sharey=False, save_path=None, display=True):
+    if sharey:
+        fig, axs = plt.subplots(3, sharex=True, sharey=True)
+    else:
+        fig, axs = plt.subplots(3, sharex=True)
+
+    if title is not None:
+        fig.suptitle(title)
+    if style is None:
+        style = 'seaborn-deep'
+    mpl.style.use(style)
+
+    frac_sigma_bound = np.mean((y < st_dev)*(y > -st_dev), axis=0)
+    frac_two_sigma_bound = np.mean((y < 2*st_dev)*(y > -2*st_dev), axis=0)
+    index = np.array(range(0, len(y)))
+
+    axs[2].xlabel = xlabel
+
+    for i in range(len(y[0])):
+        axs[i].ylabel = ylabel[i]
+        axs[i].scatter(x=index, y=y[:, i], color='red', marker='+', label=ylabel[i])
+        axs[i].plot(2*st_dev[:, i], color='blue', linestyle='-', linewidth=2,
+                    label='$2\sigma$ bound, ' + str(np.round(frac_two_sigma_bound[i]*100, 2)) + '% contained')
+        axs[i].plot(st_dev[:, i], color='blue', linestyle='--', linewidth=2,
+                    label='$\sigma$ bound, ' + str(np.round(frac_sigma_bound[i]*100, 2)) + '% contained')
+        axs[i].plot(-st_dev[:, i], color='blue', linestyle='--', linewidth=2)
+        axs[i].plot(-2*st_dev[:, i], color='blue', linestyle='-', linewidth=2)
+        axs[i].legend()
+        axs[i].set_yscale(yscale)
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, format='svg')
+    if display:
+        plt.show()
+    else:
+        plt.close()
