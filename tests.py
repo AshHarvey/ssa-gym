@@ -591,8 +591,12 @@ for i in tqdm(range(env.n)):
 env.failed_filters()
 env.plot_sigma_delta()
 env.plot_anees()
+# Test 1
 env.plot_NIS()
+# Test 2
 env.plot_innovation_bounds()
+# Test 3
+env.plot_autocorrelation()
 print('ANEES: ' + str(env.anees))
 
 

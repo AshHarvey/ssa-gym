@@ -10,7 +10,7 @@ from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix
 from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, residual_z_aer, robust_cholesky
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 from envs.results import plot_histogram, plot_orbit_vis, plot_regimes, reward_proportional_trinary_true
-from envs.results import moving_average_plot, bound_plot
+from envs.results import moving_average_plot, bound_plot, map_plot
 import gym
 from gym.utils import seeding
 from copy import copy
@@ -400,15 +400,23 @@ class SSA_Tasker_Env(gym.Env):
                        self.y[i, int(self.actions[i])])
         title = 'Normalized Innovation Squared (NIS) for Observation at Each Time Step'
         xlabel = 'Time Step'
-        ylabel = '$NIS = (z_{obs}^t-z_{pred}^t)(S^t)^{-1}(z_{obs}^t-z_{pred}^t)$'
+        ylabel = '$NIS = (z_{obs}^t-z_{pred}^t)(S^t)^{-1}(z_{obs}^t-z_{pred}^t)$ for i = [0, ' + str(self.n) + '), j = [0, ' + str(self.m) + ')'
         llabel = 'NIS'
         moving_average_plot(np.array(NIS), n=20, alpha=0.05, dof=len(self.z_true[0, 0]), style=None, title=title,
                             xlabel=xlabel, ylabel=ylabel, llabel=llabel, save_path=save_path, display=display)
 
-    def plot_innovation_bounds(self, save_path=None, display=True):
-        innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
-        st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
-
+    def plot_innovation_bounds(self, ID=None, save_path=None, display=True):
+        if ID is None:
+            innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
+            st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
+        else:
+            innovation = np.empty((self.n - 1, len(self.z_true[0, 0])))
+            st_dev = np.empty((self.n - 1, len(self.z_true[0, 0])))
+            innovation[:], st_dev[:] = np.nan, np.nan
+            for i in range(1, self.n):
+                if self.actions[i] == ID:
+                    innovation[i-1] = self.y[i, self.actions[i]]
+                    st_dev[i-1] = np.sqrt(np.diag(self.S[i, self.actions[i]]))
         title = 'Innovation and Innovation Standard Deviation Bounds'
         xlabel = 'Time Step'
         if self.obs_type == 'xyz':
@@ -443,3 +451,26 @@ class SSA_Tasker_Env(gym.Env):
 
         ax.axis("off")
 
+    def plot_map(self, objects='All', timesteps='All'):
+
+        if timesteps == 'All':
+            timesteps = [0, len(self.x_filter)]
+        if objects == 'All':
+            objects = [0, len(self.x_filter[0])]
+        x_filter = self.x_filter[timesteps[0]:timesteps[1], objects[0]:objects[1]]
+        x_true = self.x_true[timesteps[0]:timesteps[1], objects[0]:objects[1]]
+        map_plot(x_filter, x_true, self.trans_matrix, self.obs_lla)
+
+    def plot_autocorrelation(self, save_path=None, display=True):
+        autocorrelation = []
+        for tau in range(1, self.n-2):
+            autocorrelation.append(0)
+            for k in range(1, self.n-tau-1):
+                autocorrelation[-1] += self.y[k, self.actions[k]].T @ self.y[k+tau, self.actions[k+tau]] / self.n
+
+        title = 'Autocorrelation of the innovation'
+        xlabel = r'$\tau$'
+        ylabel = r'$r(\tau) = \frac{1}{N} \sum_{i=0}^{N-\tau-1}(z_{i}-\hat{z}_{i})^T(z_{i+\tau}-\hat{z}_{i+\tau})$'
+        llabel = 'Innnovation Autocorrelation'
+        moving_average_plot(np.array(autocorrelation), n=20, alpha=None, dof=len(self.z_true[0, 0]), style=None, title=title,
+                            xlabel=xlabel, ylabel=ylabel, llabel=llabel, save_path=save_path, display=display)

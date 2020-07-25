@@ -6,6 +6,10 @@ from datetime import timedelta
 import numpy as np
 from scipy.special import erf
 from scipy import stats
+from envs.transformations import ecef2lla
+import os
+os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
+from mpl_toolkits.basemap import Basemap
 
 
 @njit
@@ -218,11 +222,12 @@ def plot_nees(nees, dt, t_0, n_mov_ave=20, alpha=0.05, style=None, yscale='symlo
     if alpha is not None:
         ci = [alpha/2, 1-alpha/2]
         if axis == 0:
-            cr = stats.chi2.ppf(ci, df=n)/n
+            cr = stats.chi2.ppf(ci, df=n*6)/n
         elif axis == 1 or axis is None:
-            cr = stats.chi2.ppf(ci, df=n*m)/(n*m)
+            cr = stats.chi2.ppf(ci, df=n*m*6)/(n*m)
+            cr_points = stats.chi2.ppf(ci, df=6)
         if n_mov_ave is not None:
-            cr_bar = stats.chi2.ppf(ci, df=n_mov_ave*m)/(n_mov_ave*m)
+            cr_bar = stats.chi2.ppf(ci, df=n_mov_ave*m*6)/(n_mov_ave*m)
 
     if axis == 0:
         x = np.array(range(m))
@@ -255,9 +260,17 @@ def plot_nees(nees, dt, t_0, n_mov_ave=20, alpha=0.05, style=None, yscale='symlo
         plt.hlines(y=np.mean(nees), xmin=x[0], xmax=x[-1], linewidth=1, color='black',
                    label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))
         legend_elements = [mpl.lines.Line2D([0], [0], marker='x', lw=0, color='black', label='NEES (Colored by RSO ID)',
-                                            markerfacecolor='g', markersize=5),
-                           mpl.lines.Line2D([0], [0], color='black', lw=2,
-                                            label='Overall ANEES = ' + str(np.round(np.mean(anees), 2)))]
+                                            markerfacecolor='g', markersize=5)]
+        if alpha is not None:
+            points_contained = np.mean((nees > cr_points[0])*(nees < cr_points[1]))
+            plt.hlines(y=cr_points[0], xmin=x[0], xmax=x[-1], color='red', linestyle='--',
+                       label='Confidence Region (points), alpha = ' + str(alpha))
+            plt.hlines(y=cr_points[1], xmin=x[0], xmax=x[-1], color='red', linestyle='--')
+            label = 'Point Confidence Region, alpha = ' + str(alpha) + '; ' + str(np.round(points_contained*100, 2)) + '% contained'
+            legend_elements.append(mpl.lines.Line2D([0], [0], color='red', lw=2, linestyle='--', label=label))
+
+        legend_elements.append(mpl.lines.Line2D([0], [0], color='black', lw=2,
+                                                label='Overall ANEES = ' + str(np.round(np.mean(anees), 2))))
         if alpha is not None:
             plt.hlines(y=cr[0], xmin=x[0], xmax=x[-1], color='black', linestyle='--',
                        label='Confidence Region (overall), alpha = ' + str(alpha))
@@ -275,11 +288,11 @@ def plot_nees(nees, dt, t_0, n_mov_ave=20, alpha=0.05, style=None, yscale='symlo
                 legend_elements.append(mpl.lines.Line2D([0], [0], color='blue', lw=2, linestyle='--',
                                                         label='Moving Average Confidence Region, alpha = ' + str(alpha)))
         plt.axhline(y=1, linewidth=1, color='k', xmin=x_lim[0], xmax=x_lim[1])
-        plt.ylabel(r'$\frac{1}{n_x M}\sum_{i=1}^M((x_m^i-\hat{x}_m^i)^T(P_{k|k}^i)^{-1}(x_m^i-\hat{x}_m^i))$')
+        plt.ylabel(r'$(x_i^j-\hat{x}_i^j)^T(P_{i}^j)^{-1}(x_i^j-\hat{x}_i^j)$ for i = [0, ' + str(n) + '), j = [0, ' + str(m) + ')')
         plt.gcf().autofmt_xdate()
         plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
         plt.xlabel('Simulation Time (HH:MM)')
-        plt.title('Averaged Normalized Estimation Error Squared (ANEES) by RSO over Time')
+        plt.title('Normalized Estimation Error Squared (NEES) by RSO over Time')
         plt.legend(handles=legend_elements)
     if axis == 0:
         y_lim = (np.min(anees), np.max(anees))
@@ -393,7 +406,8 @@ def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlab
 
     if alpha is not None:
         ci = [alpha/2, 1-alpha/2]
-        cr = stats.chi2.ppf(ci, df=dof*n)/(n)
+        cr = stats.chi2.ppf(ci, df=dof*n)/n
+        cr_points = stats.chi2.ppf(ci, df=dof)
 
     x_bar = np.copy(x)
     x_bar[:] = 0
@@ -408,6 +422,10 @@ def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlab
         plt.plot(np.repeat(cr[1], len(x)), color='blue', linestyle='--', linewidth=2,
                  label='Moving average confidence region, alpha = ' + str(alpha))
         plt.plot(np.repeat(cr[0], len(x)), color='blue', linestyle='--', linewidth=2)
+        points_contained = np.mean((x > cr_points[0])*(x < cr_points[1]))
+        plt.plot(np.repeat(cr_points[1], len(x)), color='red', linestyle='--', linewidth=2,
+                 label='Point confidence region, alpha = ' + str(alpha) + '; ' + str(np.round(points_contained*100, 2)) + '% contained')
+        plt.plot(np.repeat(cr_points[0], len(x)), color='red', linestyle='--', linewidth=2)
     plt.legend()
     if save_path is not None:
         plt.savefig(save_path, dpi=300, format='svg')
@@ -429,21 +447,36 @@ def bound_plot(y, st_dev, style=None, title=None, xlabel=None, ylabel=None, ysca
         style = 'seaborn-deep'
     mpl.style.use(style)
 
-    frac_sigma_bound = np.mean((y < st_dev)*(y > -st_dev), axis=0)
-    frac_two_sigma_bound = np.mean((y < 2*st_dev)*(y > -2*st_dev), axis=0)
-    index = np.array(range(0, len(y)))
+    if np.any(np.isnan(y)):
+        y_ID = np.where((np.isnan(y[:, 0]) == False))[0]
+
+        y_not_nan = []
+        st_dev_not_nan = []
+        for i in y_ID:
+            y_not_nan.append(y[i, :])
+            st_dev_not_nan.append(st_dev[i, :])
+
+        y_not_nan = np.array(y_not_nan)
+        st_dev_not_nan = np.array(st_dev_not_nan)
+    else:
+        y_ID = np.arange(1, len(y)+1)
+        y_not_nan = y
+        st_dev_not_nan = st_dev
+
+    frac_sigma_bound = np.mean((y_not_nan < st_dev_not_nan)*(y_not_nan > -st_dev_not_nan), axis=0)
+    frac_two_sigma_bound = np.mean((y_not_nan < 2*st_dev_not_nan)*(y_not_nan > -2*st_dev_not_nan), axis=0)
 
     axs[2].xlabel = xlabel
 
     for i in range(len(y[0])):
         axs[i].ylabel = ylabel[i]
-        axs[i].scatter(x=index, y=y[:, i], color='red', marker='+', label=ylabel[i])
-        axs[i].plot(2*st_dev[:, i], color='blue', linestyle='-', linewidth=2,
+        axs[i].scatter(x=y_ID, y=y_not_nan[:, i], color='red', marker='+', label=ylabel[i])
+        axs[i].plot(y_ID, 2*st_dev_not_nan[:, i], color='blue', linestyle='-', linewidth=2,
                     label='$2\sigma$ bound, ' + str(np.round(frac_two_sigma_bound[i]*100, 2)) + '% contained')
-        axs[i].plot(st_dev[:, i], color='blue', linestyle='--', linewidth=2,
+        axs[i].plot(y_ID, st_dev_not_nan[:, i], color='blue', linestyle='--', linewidth=2,
                     label='$\sigma$ bound, ' + str(np.round(frac_sigma_bound[i]*100, 2)) + '% contained')
-        axs[i].plot(-st_dev[:, i], color='blue', linestyle='--', linewidth=2)
-        axs[i].plot(-2*st_dev[:, i], color='blue', linestyle='-', linewidth=2)
+        axs[i].plot(y_ID, -st_dev_not_nan[:, i], color='blue', linestyle='--', linewidth=2)
+        axs[i].plot(y_ID, -2*st_dev_not_nan[:, i], color='blue', linestyle='-', linewidth=2)
         axs[i].legend()
         axs[i].set_yscale(yscale)
 
@@ -453,3 +486,50 @@ def bound_plot(y, st_dev, style=None, title=None, xlabel=None, ylabel=None, ysca
         plt.show()
     else:
         plt.close()
+
+
+def map_plot(x_filter, x_true, trans_matrix, observer):
+    n, m, x_dim = x_filter.shape
+    lat_filter = np.empty((n, m))
+    lon_filter = np.empty((n, m))
+    lat_true = np.empty((n, m))
+    lon_true = np.empty((n, m))
+    x_filter_itrs = np.empty((n, m, 3))
+    x_true_itrs = np.empty((n, m, 3))
+    observer = np.degrees(observer[0]), np.degrees(observer[1]), observer[2]  # lat (deg), lon (deg), height (meters)
+
+    plt.figure(figsize=(30, 30))
+    # add map to figure
+    my_map = Basemap(projection='cyl', lon_0=0, lat_0=0, resolution='l')
+    my_map.drawmapboundary()  # fill_color='aqua')
+    my_map.fillcontinents(color='#dadada', lake_color='white')
+    my_map.drawmeridians(np.arange(-180, 180, 30), color='gray')
+    my_map.drawparallels(np.arange(-90, 90, 30), color='gray');
+
+    for i in range(n):
+        for j in range(m):
+            x_filter_itrs[i, j, :] = x_filter[i, j, :3] @ trans_matrix[i]
+            lat_filter[i, j], lon_filter[i, j], _ = ecef2lla(x_filter_itrs[i, j])
+            x_true_itrs[i, j, :] = x_true[i, j, :3] @ trans_matrix[i]
+            lat_true[i, j], lon_true[i, j], _ = ecef2lla(x_true_itrs[i, j])
+
+    lat_filter = np.degrees(lat_filter)
+    lon_filter = np.degrees(lon_filter)
+    lat_true = np.degrees(lat_true)
+    lon_true = np.degrees(lon_true)
+
+    for j in range(m):
+        my_map.scatter(lon_filter[:, j], lat_filter[:, j], marker='o', zorder=3, label='Predicted Location')
+        my_map.scatter(lon_true[:, j], lat_true[:, j], marker='x', zorder=3, label='Actual Location')
+
+    plt.annotate('Observation Station',
+                 xy=(observer[1], observer[0]),
+                 xycoords='data',
+                 xytext=(observer[1] - 180, observer[0] + 40),
+                 textcoords='offset points',
+                 fontsize=24,
+                 color='g',
+                 arrowprops=dict(arrowstyle="fancy", color='g')
+                 )
+
+    plt.show()
