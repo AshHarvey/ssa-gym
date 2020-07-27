@@ -33,7 +33,7 @@ seconds: s
 unitless: u
 """
 
-sample_orbits = np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
+sample_orbits = np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
 
 class SSA_Tasker_Env(gym.Env):
@@ -360,12 +360,25 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['plot_actions'] += e-s
 
     @property
-    def all_true_obs(self):
+    def z_true_all(self):
+        s = time.time()
+        z = []
+        for i in range(self.n):
+            for j in range(self.m):
+                z.append(self.hx(self.x_true[i, j, :3], self.trans_matrix[j], self.obs_lla, self.obs_itrs))
+        z = np.array(z)
+        z = np.reshape(z, (self.n, self.m, 3))
+        e = time.time()
+        self.runtime['all_true_obs'] += e-s
+        return z
+
+    @property
+    def aer_true_all(self):
         s = time.time()
         aer = []
         for i in range(self.n):
             for j in range(self.m):
-                aer.append(self.hx(self.x_true[i, j, :3], self.trans_matrix[j], self.obs_lla, self.obs_itrs))
+                aer.append(hx_aer_erfa(self.x_true[i, j, :3], self.trans_matrix[j], self.obs_lla, self.obs_itrs))
         aer = np.array(aer)
         aer = np.reshape(aer, (self.n, self.m, 3))
         e = time.time()
@@ -374,8 +387,10 @@ class SSA_Tasker_Env(gym.Env):
 
     def plot_visibility(self, save_path=None, display=True):
         s = time.time()
-        observations = self.all_true_obs
-        plot_orbit_vis(observations, self.obs_limit, self.dt, display=display, save_path=save_path)
+        visibility = self.aer_true_all[:, :, 1].T > self.obs_limit
+        xlabel = 'Time Step (' + str(self.dt) + ' seconds per)'
+        title = 'Visibility Plot (white = visible); elevation > ' + str(np.degrees(self.obs_limit)) + ' degrees'
+        plot_orbit_vis(visibility, title, xlabel, display=display, save_path=save_path)
         e = time.time()
         self.runtime['plot_visibility'] += e-s
 

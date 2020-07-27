@@ -554,7 +554,7 @@ print("Test 13b: FilterPy Velocity error in meters / second (min, max, average):
 print("Test 13c: FilterPy Positional uncertainty in meters (min, max, average): ", np.round(np.min(uncert_pos),2), ", ", np.round(np.max(uncert_pos), 2), ", ", np.round(np.average(uncert_pos),2))
 print("Test 13d: FilterPy Velocity uncertainty in meters / second (min, max, average): ", np.round(np.min(uncert_vel),2), ", ", np.round(np.max(uncert_vel), 2), ", ", np.round(np.average(uncert_vel),2))
 
-# !------------ Test 14 - simple env v2 - random action, no noise at init or on obs, no viz limits
+# !------------ Test 14 - simple env v2 - one object, no viz limits, xyz measurements
 
 import gym
 import numpy as np
@@ -571,9 +571,9 @@ R = np.diag((500**2, 500**2, 500**2))
 x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
 z_sigma = (500, 500, 500) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
+kwargs = {'steps': 480, 'rso_count': 1, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.005, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
+          'q_sigma': 0.0000525, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
           'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
@@ -602,26 +602,27 @@ print('ANEES: ' + str(env.anees))
 
 # !------------ Test 14 - simple env v2 - random action, no noise at init or on obs, no viz limits
 
+
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia
+from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
 from agents import agent_naive_random, agent_naive_greedy
 from envs.transformations import arcsec2rad
 
-P_0 = np.diag((1000**2, 1000**2, 1000**2, 10**2, 10**2, 10**2))
+P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1000**2))
+R = np.diag((500**2, 500**2, 500**2))
 
-x_sigma = (0, 0, 0, 0, 0, 0) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (0, 0, 0) # (1, 1, 1000)
+x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
+z_sigma = (500, 500, 500) # (1, 1, 1000)
 
 kwargs = {'steps': 480, 'rso_count': 50, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma,
-          'z_sigma': z_sigma, 'q_sigma': 0.001, 'P_0': P_0, 'R': R, 'update_interval': 1,
+          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'q_sigma': 0.0000525, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
           'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6}
+          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
 env.seed(0)
@@ -635,12 +636,15 @@ for i in tqdm(range(env.n)):
         obs, reward, done, _ = env.step(action)
 
 env.failed_filters()
-failing_objects = np.argwhere(env.delta_pos[env.i, :] > 10e5).flatten()
-
-if failing_objects.shape[0] == 0:
-    env.plot_sigma_delta()
-else:
-    env.plot_sigma_delta(objects=failing_objects, save_path=None)
+env.plot_sigma_delta()
+env.plot_anees()
+# Test 1
+env.plot_NIS()
+# Test 2
+env.plot_innovation_bounds()
+# Test 3
+env.plot_autocorrelation()
+print('ANEES: ' + str(env.anees))
 
 # !------------ Test 15 - simple env v2 - random action, no noise at init or on obs, INCLUDES viz limits
 

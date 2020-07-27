@@ -8,7 +8,7 @@ from scipy.special import erf
 from scipy import stats
 from envs.transformations import ecef2lla
 import os
-os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
+os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
 from mpl_toolkits.basemap import Basemap
 
 
@@ -362,13 +362,13 @@ def plot_histogram(values, bins=None, style=None, title='Histogram of Errors (%)
         plt.close()
 
 
-def plot_orbit_vis(observations, obs_limit, dt, display=True, save_path=None):
+def plot_orbit_vis(visibility, title, xlabel, display=True, save_path=None):
     fig = plt.figure()
     plt.ylabel('RSO ID')
-    plt.xlabel('Time Step (' + str(dt) + ' seconds per)')
-    plt.title('Visibility Plot (white = visible)')
+    plt.xlabel(xlabel)
+    plt.title(title)
     ax = fig.add_subplot(111)
-    ax.imshow(observations[:, :, 1].T > obs_limit, aspect='auto', cmap=plt.cm.gray, interpolation='nearest')
+    ax.imshow(visibility, aspect='auto', cmap=plt.cm.gray, interpolation='nearest')
     if save_path is not None:
         plt.savefig(save_path, dpi=300, format='svg')
     if display:
