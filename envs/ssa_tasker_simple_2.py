@@ -6,7 +6,7 @@ from filterpy.kalman.UKF import UnscentedKalmanFilter as UKF
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
 from poliastro.core.elements import rv2coe
-from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_b, get_eops, ecef2aer, ecef2lla
+from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_a, get_eops, ecef2aer, ecef2lla
 from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, residual_z_aer, robust_cholesky
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 from envs.results import plot_histogram, plot_orbit_vis, plot_regimes, reward_proportional_trinary_true
@@ -33,7 +33,7 @@ seconds: s
 unitless: u
 """
 
-sample_orbits = np.load('envs/sample_orbits.npy')
+sample_orbits = np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
 
 class SSA_Tasker_Env(gym.Env):
@@ -102,7 +102,7 @@ class SSA_Tasker_Env(gym.Env):
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim)) # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2)) # observations for all objects at each time step
         self.time = [self.t_0 + timedelta(seconds=self.dt)*i for i in range(self.n)] # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_b(self.time, self.eops) # used for celestial to terrestrial
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops) # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim)) # array to contain the innovation of each observation
@@ -139,7 +139,7 @@ class SSA_Tasker_Env(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         self.init_seed = seed
         return [seed]
-    
+
     def reset(self):
         s = time.time()
         """reset filter"""
@@ -178,7 +178,7 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['reset'] += e-s
         return self.obs[0]
-    
+
     def step(self, a):
         step_s = time.time()
         s = time.time()

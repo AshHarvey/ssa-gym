@@ -14,7 +14,7 @@ kwargs = {'steps': 2880, 'rso_count': 50, 'time_step': 30.0, 't_0': datetime(202
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
 
 episodes = 1
-agents = [agent_pos_error_greedy] # agent_naive_random, agent_visible_random, agent_naive_greedy, agent_visible_greedy
+agents = [agent_naive_random] # agent_naive_random, agent_visible_random, agent_naive_greedy, agent_visible_greedy
 seeds = np.random.randint(0, 2**32-1, episodes)
 print('seeds: ', seeds)
 

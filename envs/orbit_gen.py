@@ -2,7 +2,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from astropy import units as u
 from poliastro.bodies import Earth
-from envs.transformations import deg2rad, lla2ecef, gcrs2irts_matrix_b, get_eops, ecef2lla
+from envs.transformations import deg2rad, lla2ecef, gcrs2irts_matrix_a, get_eops, ecef2lla
 from envs.dynamics import init_state_vec, fx_xyz_markley as fx, hx_aer_erfa as hx
 from tqdm import tqdm
 from poliastro.core.elements import rv2coe
@@ -40,7 +40,7 @@ RE = Earth.R_mean.to_value(u.m)
 t_0 = datetime(2020, 5, 4, 0, 0, 0)
 t_samples = [t_0 + timedelta(seconds=step_size)*i for i in range(n)]
 eops = get_eops()
-trans_matrix = gcrs2irts_matrix_b(t=t_samples, eop=eops)
+trans_matrix = gcrs2irts_matrix_a(t=t_samples, eop=eops)
 hx_kwargs = [{"trans_matrix": trans_matrix[i], "observer_itrs": obs_itrs, "observer_lla": obs_lla} for i in range(n)]
 
 candidates = []
@@ -96,7 +96,7 @@ dt = 30.0
 n = duration*60*2
 m = len(arr)
 t_steps = [t_0 + timedelta(seconds=30)*i for i in range(n)]
-trans_matrix = gcrs2irts_matrix_b(t=t_steps, eop=eops)
+trans_matrix = gcrs2irts_matrix_a(t=t_steps, eop=eops)
 hx_kwargs = [{"trans_matrix": trans_matrix[i], "observer_itrs": obs_itrs, "observer_lla": obs_lla} for i in range(n)]
 for i in tqdm(range(n)):
     for j in range(m):

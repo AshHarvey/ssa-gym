@@ -16,7 +16,7 @@ z_sigma = (0, 0, 0) # (1, 1, 1000)
 kwargs = {'steps': 2880, 'rso_count': 50, 'time_step': 30.0, 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma,
           'z_sigma': z_sigma, 'q_sigma': 0.001, 'P_0': P_0, 'R': R, 'update_interval': 1,
-          'orbits': np.load('envs/sample_orbits.npy'), 'fx': fx_xyz_cowell}
+          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
 env.seed(0)

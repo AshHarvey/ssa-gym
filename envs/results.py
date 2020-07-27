@@ -8,7 +8,7 @@ from scipy.special import erf
 from scipy import stats
 from envs.transformations import ecef2lla
 import os
-os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
+os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
 from mpl_toolkits.basemap import Basemap
 
 
@@ -490,6 +490,7 @@ def bound_plot(y, st_dev, style=None, title=None, xlabel=None, ylabel=None, ysca
 
 def map_plot(x_filter, x_true, trans_matrix, observer):
     n, m, x_dim = x_filter.shape
+    print(n)
     lat_filter = np.empty((n, m))
     lon_filter = np.empty((n, m))
     lat_true = np.empty((n, m))
@@ -500,11 +501,7 @@ def map_plot(x_filter, x_true, trans_matrix, observer):
 
     plt.figure(figsize=(30, 30))
     # add map to figure
-    my_map = Basemap(projection='cyl', lon_0=0, lat_0=0, resolution='l')
-    my_map.drawmapboundary()  # fill_color='aqua')
-    my_map.fillcontinents(color='#dadada', lake_color='white')
-    my_map.drawmeridians(np.arange(-180, 180, 30), color='gray')
-    my_map.drawparallels(np.arange(-90, 90, 30), color='gray');
+
 
     for i in range(n):
         for j in range(m):
@@ -517,9 +514,15 @@ def map_plot(x_filter, x_true, trans_matrix, observer):
     lon_filter = np.degrees(lon_filter)
     lat_true = np.degrees(lat_true)
     lon_true = np.degrees(lon_true)
-
+    print(lat_filter)
+    my_map = Basemap(projection='cyl', lon_0=0, lat_0=0, resolution='l')
+    my_map.drawmapboundary()  # fill_color='aqua')
+    my_map.fillcontinents(color='#dadada', lake_color='white')
+    my_map.drawmeridians(np.arange(-180, 180, 30), color='gray')
+    my_map.drawparallels(np.arange(-90, 90, 30), color='gray');
     for j in range(m):
-        my_map.scatter(lon_filter[:, j], lat_filter[:, j], marker='o', zorder=3, label='Predicted Location')
+        x , y = my_map(lon_filter[:, j],lat_filter[:, j])
+        my_map.scatter(x, y, marker='o', zorder=3, label='Predicted Location')
         my_map.scatter(lon_true[:, j], lat_true[:, j], marker='x', zorder=3, label='Actual Location')
 
     plt.annotate('Observation Station',

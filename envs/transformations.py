@@ -23,8 +23,10 @@ def get_eops():
         dataframe; https://datacenter.iers.org/eop.php
     """
     url = 'ftp://hpiers.obspm.fr/iers/eop/eopc04/eopc04_IAU2000.62-now'
-    datasource = np.DataSource(url)
-    file = datasource.open(url)
+    ds = np.DataSource('C:/Users/dpawa/PycharmProjects/ssa-gym')
+    file = ds.open(url)
+    # datasource = np.DataSource(url)
+    # file = datasource.open(url)
     array = np.genfromtxt(file, skip_header=14)
     headers = ['Year', 'Month', 'Day', 'MJD', 'x', 'y', 'UT1-UTC', 'LOD', 'dX',
                'dY', 'x Err', 'y Err', 'UT1-UTC Err', 'LOD Err', 'dX Err', 'dY Err']
@@ -153,7 +155,7 @@ def gcrs2irts_matrix_b(t, eop):
         # TT (MJD). */
         djmjd0, date = erfa.cal2jd(iy=year, im=month, id=day)
         # jd = djmjd0 + date
-        day_frac = (60.0 * (60 * hour + minute) + second) / DAYSEC
+        day_frac = (60.0 * (60.0 * hour + minute) + second) / DAYSEC
         utc = date + day_frac
         Dat = erfa.dat(year, month, day, day_frac)
         tai = utc + Dat / DAYSEC

@@ -279,7 +279,7 @@ from filterpy.kalman import MerweScaledSigmaPoints as MerweScaledSigmaPoints
 from filterpy.kalman.UKF import UnscentedKalmanFilter as UnscentedKalmanFilter
 from envs.dynamics import residual_xyz as residual_x, residual_z_aer as residual_z, mean_z_enu as mean_z
 from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx
-from envs.transformations import lla2ecef, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
+from envs.transformations import lla2ecef, gcrs2irts_matrix_a as gcrs2irts_matrix, get_eops
 from datetime import datetime, timedelta
 import numpy as np
 from scipy.spatial import distance
@@ -431,7 +431,7 @@ from filterpy.kalman.UKF import UnscentedKalmanFilter
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from envs.dynamics import residual_z_aer as residual_z, mean_z_enu as mean_z
 from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx
-from envs.transformations import lla2ecef, gcrs2irts_matrix_b as gcrs2irts_matrix, get_eops
+from envs.transformations import lla2ecef, gcrs2irts_matrix_a as gcrs2irts_matrix, get_eops
 from datetime import datetime, timedelta
 import numpy as np
 from envs.dynamics import init_state_vec
@@ -722,7 +722,7 @@ z_sigma = (1, 1, 1000) # (1, 1, 1000)
 kwargs = {'steps': 480, 'rso_count': 50, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma,
           'z_sigma': z_sigma, 'q_sigma': 0.001, 'P_0': P_0, 'R': R, 'update_interval': 1,
-          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
