@@ -159,8 +159,6 @@ assert test6b < 1.0e-4, print("Test 6b: Prediction off by more than 1.0e-4 meter
 print("Test 6: step 50 errors: pos: ", test6a, " (meters), vel: ", test6b, " (meters / second)")
 
 # !------------ Test 7 - Filter Updates
-from envs.filter import update
-
 R = np.array([125, 125, 125])
 z = x_true[:3]
 
@@ -554,7 +552,7 @@ print("Test 13b: FilterPy Velocity error in meters / second (min, max, average):
 print("Test 13c: FilterPy Positional uncertainty in meters (min, max, average): ", np.round(np.min(uncert_pos),2), ", ", np.round(np.max(uncert_pos), 2), ", ", np.round(np.average(uncert_pos),2))
 print("Test 13d: FilterPy Velocity uncertainty in meters / second (min, max, average): ", np.round(np.min(uncert_vel),2), ", ", np.round(np.max(uncert_vel), 2), ", ", np.round(np.average(uncert_vel),2))
 
-# !------------ Test 14 - simple env v2 - one object, no viz limits, xyz measurements
+# !------------ Test 14 - simple env v2 - 20 objects, no viz limits, xyz measurements
 
 import gym
 import numpy as np
@@ -571,14 +569,14 @@ R = np.diag((500**2, 500**2, 500**2))
 x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
 z_sigma = (500, 500, 500) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 1, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
+kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.0000525, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
+          'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
           'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(0)
+env.seed(1)
 obs = env.reset()
 agent = agent_naive_random
 
@@ -588,27 +586,19 @@ for i in tqdm(range(env.n)):
         action = agent(obs, env)
         obs, reward, done, _ = env.step(action)
 
-env.failed_filters()
-env.plot_sigma_delta()
-env.plot_anees()
-# Test 1
-env.plot_NIS()
-# Test 2
-env.plot_innovation_bounds()
-# Test 3
-env.plot_autocorrelation()
-print('ANEES: ' + str(env.anees))
+print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 14 fitness tests:')
+print(env.fitness_test)
 
 
-# !------------ Test 14 - simple env v2 - random action, no noise at init or on obs, no viz limits
-
+# !------------ Test 15 - simple env v2 - 20 objects, 15 degree viz limits, xyz measurements
 
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
 from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
-from agents import agent_naive_random, agent_naive_greedy
+from agents import agent_visible_random
 from envs.transformations import arcsec2rad
 
 P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
@@ -618,16 +608,16 @@ R = np.diag((500**2, 500**2, 500**2))
 x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
 z_sigma = (500, 500, 500) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 50, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.0000525, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
+kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
+          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
           'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(0)
+env.seed(1)
 obs = env.reset()
-agent = agent_naive_random
+agent = agent_visible_random
 
 done = False
 for i in tqdm(range(env.n)):
@@ -635,16 +625,20 @@ for i in tqdm(range(env.n)):
         action = agent(obs, env)
         obs, reward, done, _ = env.step(action)
 
-env.failed_filters()
 env.plot_sigma_delta()
+env.plot_visibility()
 env.plot_anees()
-# Test 1
-env.plot_NIS()
-# Test 2
+env.plot_autocorrelation() #x
+env.plot_map()
+env.plot_actions()
+env.plot_rewards()
 env.plot_innovation_bounds()
-# Test 3
-env.plot_autocorrelation()
-print('ANEES: ' + str(env.anees))
+env.plot_regimes()
+env.plot_NIS()
+
+print('Test 15 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 15 fitness tests:')
+print(env.fitness_test)
 
 # !------------ Test 15 - simple env v2 - random action, no noise at init or on obs, INCLUDES viz limits
 

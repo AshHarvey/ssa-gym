@@ -110,7 +110,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     tim_lim = (t_0.toordinal(), t_0.toordinal()+n/(24*60*60/dt))
 
     # Uncertainty in Position
-    plt.subplot(221)
+    ax1 = plt.subplot(221)
     plt.plot(t, sigma_pos, linewidth=0.5)
     plt.yscale(yscale)
     plt.gcf().autofmt_xdate()
@@ -122,7 +122,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.grid(True)
 
     # Uncertainty in Velocity
-    plt.subplot(222)
+    ax2 = plt.subplot(222, sharex=ax1)
     plt.plot(t, sigma_vel, linewidth=0.5)
     plt.yscale(yscale)
     plt.gcf().autofmt_xdate()
@@ -133,7 +133,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.grid(True)
 
     # Error in Position
-    plt.subplot(223)
+    ax3 = plt.subplot(223, sharex=ax1, sharey=ax1)
     plt.plot(t, delta_pos, linewidth=0.5)
     plt.yscale(yscale)
     plt.gcf().autofmt_xdate()
@@ -145,7 +145,7 @@ def plot_delta_sigma(sigma_pos, sigma_vel, delta_pos, delta_vel, dt, t_0, style=
     plt.grid(True)
 
     # Error in Velocity
-    plt.subplot(224)
+    ax4 = plt.subplot(224, sharex=ax1, sharey=ax2)
     plt.plot(t, delta_vel, linewidth=0.5)
     plt.yscale(yscale)
     plt.gcf().autofmt_xdate()
@@ -168,7 +168,7 @@ def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
     t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
 
     # plot with Reward over Time
-    plt.figure()
+    fig = plt.figure()
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
@@ -182,6 +182,8 @@ def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
     plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
     plt.ylim(reward_lim)
     plt.xlim(tim_lim)
+    plt.xlabel('Simulation Time (HH:MM)')
+    plt.ylabel('Reward per Time Step (0 to 1)')
     plt.title('Reward over Time')
     plt.grid(True)
 
@@ -348,11 +350,17 @@ def plot_histogram(values, bins=None, style=None, title='Histogram of Errors (%)
     mpl.style.use(style)
     if bins is 'default':
         bins = [0, 100, 1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000]
+    if bins is 'int':
+        m = np.max(values)+1
+        bins = np.arange(m+1) - 0.5
 
     plt.xlabel(xlabel)
 
     plt.gca().yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=n))
     plt.hist(x=values, bins=bins)
+    if bins is 'int':
+        plt.xticks(range(m))
+        plt.xlim([-1, m])
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300, format='svg')
@@ -367,8 +375,7 @@ def plot_orbit_vis(visibility, title, xlabel, display=True, save_path=None):
     plt.ylabel('RSO ID')
     plt.xlabel(xlabel)
     plt.title(title)
-    ax = fig.add_subplot(111)
-    ax.imshow(visibility, aspect='auto', cmap=plt.cm.gray, interpolation='nearest')
+    plt.imshow(visibility, aspect='auto', cmap=plt.cm.gray, interpolation='nearest')
     if save_path is not None:
         plt.savefig(save_path, dpi=300, format='svg')
     if display:
@@ -378,10 +385,12 @@ def plot_orbit_vis(visibility, title, xlabel, display=True, save_path=None):
 
 
 def plot_regimes(xy, save_path=None, display=True):
-    plt.figure()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, xlim=(0, 40000), ylim=(0.0, 0.75))
     plt.scatter(x=xy[:, 0], y=xy[:, 1])
     for i, ((x, y),) in enumerate(zip(xy)):
-        plt.text(x, y, i, ha="center", va="center")
+        ax.annotate(i, xy=(x, y), xycoords='data', ha="center", va="center", xytext=(20, 20),
+                    textcoords='offset pixels', arrowprops=dict(arrowstyle="-"))
 
     plt.ylabel('Eccentricity')
     plt.xlabel('Altitude at initial time step (kilometers)')
@@ -400,32 +409,37 @@ def reward_proportional_trinary_true(delta_pos):
 
 
 def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlabel=None, ylabel=None, llabel=None, save_path=None, display=True):
+    fig = plt.figure()
+
     if style is None:
         style = 'seaborn-deep'
     mpl.style.use(style)
+
+    x_ma = np.ma.masked_array(x, np.isnan(x))
 
     if alpha is not None:
         ci = [alpha/2, 1-alpha/2]
         cr = stats.chi2.ppf(ci, df=dof*n)/n
         cr_points = stats.chi2.ppf(ci, df=dof)
 
-    x_bar = np.copy(x)
+    x_bar = np.copy(x_ma)
     x_bar[:] = 0
-    for i in range(len(x)):
-        x_bar[i] = np.mean(x[:i+1][-n:])
+    for i in range(len(x_ma)):
+        x_bar[i] = np.mean(x_ma[:i+1][-n:])
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.scatter(x=range(0, len(x)), y=x, color='red', marker='+', label=llabel)
+    plt.scatter(x=range(0, len(x_ma)), y=x_ma, color='red', marker='+', label=llabel)
     plt.plot(x_bar, color='blue', linestyle='-', linewidth=2, label=str(n) + ' step moving average of ' + llabel)
     if alpha is not None:
-        plt.plot(np.repeat(cr[1], len(x)), color='blue', linestyle='--', linewidth=2,
-                 label='Moving average confidence region, alpha = ' + str(alpha))
-        plt.plot(np.repeat(cr[0], len(x)), color='blue', linestyle='--', linewidth=2)
+        contained = np.mean((x_bar > cr[0])*(x_bar < cr[1]))
+        plt.plot(np.repeat(cr[1], len(x_bar)), color='blue', linestyle='--', linewidth=2,
+                 label='Moving average confidence region, alpha = ' + str(alpha) + '; ' + str(np.round(contained*100, 2)) + '% contained')
+        plt.plot(np.repeat(cr[0], len(x_bar)), color='blue', linestyle='--', linewidth=2)
         points_contained = np.mean((x > cr_points[0])*(x < cr_points[1]))
-        plt.plot(np.repeat(cr_points[1], len(x)), color='red', linestyle='--', linewidth=2,
+        plt.plot(np.repeat(cr_points[1], len(x_bar)), color='red', linestyle='--', linewidth=2,
                  label='Point confidence region, alpha = ' + str(alpha) + '; ' + str(np.round(points_contained*100, 2)) + '% contained')
-        plt.plot(np.repeat(cr_points[0], len(x)), color='red', linestyle='--', linewidth=2)
+        plt.plot(np.repeat(cr_points[0], len(x_bar)), color='red', linestyle='--', linewidth=2)
     plt.legend()
     if save_path is not None:
         plt.savefig(save_path, dpi=300, format='svg')
@@ -536,3 +550,7 @@ def map_plot(x_filter, x_true, trans_matrix, observer):
                  )
 
     plt.show()
+
+def autocorr_naive_nan(x):
+    N = len(x)
+    return np.array([np.nanmean(x[iSh:] * x[:N-iSh]) for iSh in range(N)])
