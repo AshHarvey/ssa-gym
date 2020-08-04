@@ -1,14 +1,14 @@
 # ssa-gym
 This is a repository of an OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
 
-Original repository author : Maj. Ashton Harvey
+Original repository author : Maj. Ashton Harvey, Devayani Pawar
 
 The repository includes:
 * [Data Source and Transformation functions](envs/transformations.py)
 * [Source code of SSA tasker](envs/ssa_tasker_simple_2.py)
 * [filter.py](envs/filter.py) is an extract of Roger Labbe's FilterPy (https://filterpy.readthedocs.io/) 
 * [Test Cases](tests.py)
-* [Results and Plots](envs/tests.py)
+* [Results and Plots](envs/results.py)
 
 ## Requirements
 Python 3.6, and other common packages listed in `requirements.txt`.
@@ -35,7 +35,7 @@ Python 3.6, and other common packages listed in `requirements.txt`.
 @misc{ssa-gym_2020,
   title={An OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
 },
-  author={Maj. Ashton Harvey},
+  author={Maj. Ashton Harvey, Devayani Pawar},
   year={2020},
   publisher={Github},
   journal={GitHub repository},

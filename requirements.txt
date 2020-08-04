@@ -3,11 +3,11 @@ scipy
 numba
 pandas
 astropy
+seaborn
 matplotlib
 seaborn
 opencv-python
 h5py
-imgaug
 IPython[all]
 gym
 filterpy

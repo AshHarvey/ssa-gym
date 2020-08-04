@@ -56,7 +56,7 @@ az1 = results.az.to_value(u.rad)
 alt1 = results.alt.to_value(u.rad)
 sr1 = results.distance.to_value(u.m)
 
-aer = ecef2aer(ecef2lla(xyz1), xyz2, xyz1)
+aer = ecef2aer(ecef2lla(xyz1), xyz2)
 
 test3_error = [az1-aer[0], alt1-aer[1], sr1-aer[2]]
 
@@ -233,8 +233,8 @@ observer_itrs = lla2ecef(observer_lla)
 sat_samples = lla2ecef(np.array([0, 0, 20000])) + noise
 sat_mean = np.mean(sat_samples, axis=0)
 
-obs_samples = np.array([ecef2aer(observer_lla, sat_sample, observer_itrs) for sat_sample in sat_samples])
-obs_mean = ecef2aer(observer_lla, sat_mean, observer_itrs)
+obs_samples = np.array([ecef2aer(observer_lla, sat_sample) for sat_sample in sat_samples])
+obs_mean = ecef2aer(observer_lla, sat_mean)
 obs_mean_calc = mean_z(obs_samples, Wm=np.repeat(1/obs_samples.shape[0], obs_samples.shape[0]))
 
 if np.all(np.subtract(obs_mean, obs_mean_calc) < 1e-7):
@@ -570,13 +570,13 @@ x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 1
 z_sigma = (500, 500, 500) # (1, 1, 1000)
 
 kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
           'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(1)
+env.seed(0)
 obs = env.reset()
 agent = agent_naive_random
 
@@ -584,6 +584,7 @@ done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
@@ -611,7 +612,7 @@ z_sigma = (500, 500, 500) # (1, 1, 1000)
 kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
           'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)

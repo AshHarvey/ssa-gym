@@ -39,10 +39,10 @@ sample_orbits = np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.n
 
 
 class SSA_Tasker_Env(gym.Env):
-    metadata = {'render.modes': ['human']}
+    #metadata = {'render.modes': ['human']}
     RE = Earth.R_mean.to_value(u.m)  # radius of earth
 
-    def __init__(self, steps=2880, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
+    def __init__(self, steps=580, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
                  obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
                  z_sigma=(1, 1, 1000), q_sigma=0.001, P_0=None, R=None, update_interval=1, orbits=sample_orbits,
                  fx=fx_xyz_farnocchia, hx=hx_aer_erfa, alpha=0.001, beta=2., kappa=3 - 6, mean_z=mean_z_uvw,
@@ -59,7 +59,7 @@ class SSA_Tasker_Env(gym.Env):
         self.dt = time_step  # length of time steps [s]
         self.n = steps  # max run steps
         self.m = rso_count  # number of Resident Space Object (RSO) to include in the simulation
-        self.obs_limit = np.radians(obs_limit)  # don't observe objects below this elevation [rad]
+        self.obs_limit = np.radians(obs_limit)  # observation limit for objects below this elevation [rad]
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
         self.orbits = orbits  # orbits to sample from
@@ -80,7 +80,7 @@ class SSA_Tasker_Env(gym.Env):
         # standard deviation of noise added to initial state estimates; [m, m, m, m/s, m/s, m/s]
         self.x_sigma = np.array(x_sigma)
         self.Q = Q_noise_fn(dim=2, dt=self.dt, var=q_sigma ** 2, block_size=3, order_by_dim=False)
-        self.eops = get_eops()
+        self.eop = get_eops()
         self.fx = fx
         self.hx = hx
         self.mean_z = mean_z
@@ -103,8 +103,9 @@ class SSA_Tasker_Env(gym.Env):
         self.x_filter = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
-        self.time = [self.t_0 + timedelta(seconds=self.dt) * i for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
+        self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
+
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eop)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation
@@ -179,9 +180,11 @@ class SSA_Tasker_Env(gym.Env):
                                                                                            self.obs[0])  # initial error
         self.rewards[:] = 0
         self.i = 0  # sets initial time step
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eop)
         e = time.time()
         self.runtime['reset'] += e - s
         return self.obs[0]
+
 
     def step(self, a):
         step_s = time.time()
@@ -217,12 +220,9 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['perform predictions'] += e - s
         """update with observation"""
         s = time.time()
-        if self.i % self.update_interval == 0:
+        if (self.i % self.update_interval) == 0:
             if not (a in self.failed_filters_id):
-                hx_kwargs = {"trans_matrix": self.trans_matrix[self.i],
-                             "observer_itrs": self.obs_itrs,
-                             "observer_lla": self.obs_lla,
-                             "time": self.time[self.i]}
+                hx_kwargs = {"trans_matrix": self.trans_matrix[self.i],"observer_itrs": self.obs_itrs,"observer_lla": self.obs_lla,"time": self.time[self.i]}
                 self.z_true[self.i, a] = self.hx(self.x_true[self.i][a], **hx_kwargs)
                 if self.object_visible([a])[0]:
                     try:
@@ -251,8 +251,9 @@ class SSA_Tasker_Env(gym.Env):
         self.rewards[self.i] = reward_proportional_trinary_true(self.delta_pos[self.i])
         done = False
         if self.i + 1 >= self.n:
-            done = True
+                 done = True
         e = time.time()
+
         self.runtime['Observations and Reward'] += e - s
         step_e = time.time()
         self.runtime['step'] += step_e - step_s
@@ -287,7 +288,7 @@ class SSA_Tasker_Env(gym.Env):
             print('RSO ID expected, but not supplied')
             return RSO_ID
         x_itrs = np.array([self.trans_matrix[self.i] @ self.x_true[self.i, j, :3] for j in RSO_ID])
-        el = np.array([ecef2aer(self.obs_lla, x, self.obs_itrs)[1] for x in x_itrs])
+        el = np.array([ecef2aer(self.obs_lla, x)[1] for x in x_itrs])
         viz_bool = el >= self.obs_limit
         return viz_bool
 
@@ -295,7 +296,7 @@ class SSA_Tasker_Env(gym.Env):
     def object_visibility(self):
         s = time.time()
         x_itrs = np.array([self.trans_matrix[self.i] @ self.x_true[self.i, j, :3] for j in range(self.m)])
-        el = np.array([ecef2aer(self.obs_lla, x, self.obs_itrs)[1] for x in x_itrs])
+        el = np.array([ecef2aer(self.obs_lla, x)[1] for x in x_itrs])
         viz = el >= self.obs_limit
         e = time.time()
         self.runtime['object_visibility'] += e - s
