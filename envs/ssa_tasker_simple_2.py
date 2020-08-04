@@ -80,7 +80,7 @@ class SSA_Tasker_Env(gym.Env):
         # standard deviation of noise added to initial state estimates; [m, m, m, m/s, m/s, m/s]
         self.x_sigma = np.array(x_sigma)
         self.Q = Q_noise_fn(dim=2, dt=self.dt, var=q_sigma ** 2, block_size=3, order_by_dim=False)
-        self.eop = get_eops()
+        self.eops = get_eops()
         self.fx = fx
         self.hx = hx
         self.mean_z = mean_z
@@ -104,7 +104,7 @@ class SSA_Tasker_Env(gym.Env):
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
         self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eop)  # used for celestial to terrestrial
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation

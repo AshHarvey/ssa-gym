@@ -431,8 +431,8 @@ def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlab
     x_ma = np.ma.masked_array(x, np.isnan(x))
 
     if alpha is not None:
-        ci = [alpha/2, 1-alpha/2]
-        cr = stats.chi2.ppf(ci, df=dof*n)/n
+        ci = [alpha / 2, 1 - alpha / 2]
+        cr = stats.chi2.ppf(ci, df=dof * n) / n
         cr_points = stats.chi2.ppf(ci, df=dof)
 
     x_bar = np.copy(x_ma)

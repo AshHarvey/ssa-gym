@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-
 import numpy as np
 from numpy import sin, cos, arctan2 as atan2, arctan as atan, tan, arcsin as asin, arccos as acos, sum, pi, sqrt, radians, float64, array, power, hypot
 import pandas as pd
@@ -15,8 +14,6 @@ b = (1-f)*a
 arcsec2rad = pi/648000 # converts arc seconds to radians
 deg2rad = pi/180 # converts degrees to radians
 tau = 2*pi
-
-
 
 
 def get_eops():

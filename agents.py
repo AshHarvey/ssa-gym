@@ -5,8 +5,6 @@ import numpy as np
 def agent_naive_greedy(obs, env=None):
     trace = np.sum(obs[:, 6:], axis=1)
     return np.argmax(trace)
-
-
 def agent_naive_random(obs=None, env=None):
     return env.action_space.sample()
 
