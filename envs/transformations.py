@@ -264,7 +264,7 @@ def ecef2lla(ecef, a=a, b=b, f=f, e=e):
 def aer2uvw(aer):
     """
     :param aer: array[azimuth, elevation, slant]
-    :return: enu
+    :return: uvwobserver centered instead earth centered --> u - north, v - east, w - up(azimuth)
     """
     # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
     # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
@@ -298,7 +298,6 @@ def uvw2aer(uvw):
 
 def rrm2ddm(aer):
     """
-
     :param aer: array[azimuth, elevation, slant]
     :return: array[azimuth, elevation, slant] in degrees
     """
