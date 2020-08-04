@@ -56,7 +56,7 @@ az1 = results.az.to_value(u.rad)
 alt1 = results.alt.to_value(u.rad)
 sr1 = results.distance.to_value(u.m)
 
-aer = ecef2aer(ecef2lla(xyz1), xyz2)
+aer = ecef2aer(ecef2lla(xyz1), xyz2, xyz1)
 
 test3_error = [az1-aer[0], alt1-aer[1], sr1-aer[2]]
 
@@ -233,8 +233,8 @@ observer_itrs = lla2ecef(observer_lla)
 sat_samples = lla2ecef(np.array([0, 0, 20000])) + noise
 sat_mean = np.mean(sat_samples, axis=0)
 
-obs_samples = np.array([ecef2aer(observer_lla, sat_sample) for sat_sample in sat_samples])
-obs_mean = ecef2aer(observer_lla, sat_mean)
+obs_samples = np.array([ecef2aer(observer_lla, sat_sample, observer_itrs) for sat_sample in sat_samples])
+obs_mean = ecef2aer(observer_lla, sat_mean, observer_itrs)
 obs_mean_calc = mean_z(obs_samples, Wm=np.repeat(1/obs_samples.shape[0], obs_samples.shape[0]))
 
 if np.all(np.subtract(obs_mean, obs_mean_calc) < 1e-7):
@@ -432,7 +432,7 @@ import numpy as np
 from tqdm import tqdm
 from datetime import datetime
 from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
-from agents import agent_naive_random, agent_naive_greedy
+from agents import agent_visible_random
 from envs.transformations import arcsec2rad
 
 P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
@@ -443,15 +443,15 @@ x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 1
 z_sigma = (500, 500, 500) # (1, 1, 1000)
 
 kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
           'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(0)
+env.seed(1)
 obs = env.reset()
-agent = agent_naive_random
+agent = agent_visible_random
 
 done = False
 for i in tqdm(range(env.n)):
@@ -462,10 +462,22 @@ for i in tqdm(range(env.n)):
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 14 fitness tests: 20 objects, no viz limits, xyz measurements')
-print(env.fitness_test)
+print(env.fitness_test())
+
+print("Test 15: Plots...")
+env.plot_sigma_delta(save_path=None)
+env.plot_visibility(save_path=None)
+env.plot_anees(save_path=None)
+env.plot_autocorrelation(save_path=None)
+env.plot_map()
+env.plot_actions(save_path=None)
+env.plot_rewards()
+env.plot_innovation_bounds(save_path=None)
+env.plot_regimes(save_path=None)
+env.plot_NIS(save_path=None)
 
 
-# !------------ Test 15 - simple env v2 - 5 objects, 15 degree viz limits, xyz measurements
+# !------------ Test 16 - simple env v2 - 5 objects, 15 degree viz limits, xyz measurements
 
 import gym
 import numpy as np
@@ -485,7 +497,7 @@ z_sigma = (500, 500, 500) # (1, 1, 1000)
 kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
           'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
           'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
           'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
@@ -497,45 +509,35 @@ done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
-env.plot_sigma_delta()
-env.plot_visibility()
-env.plot_anees()
-env.plot_autocorrelation() # stattools.py:578: RuntimeWarning: invalid value encountered in true_divide acf = avf[:nlags + 1] / avf[0]
-env.plot_map()
-env.plot_actions() #needs int x axis
-env.plot_rewards()
-env.plot_innovation_bounds()
-env.plot_regimes()
-env.plot_NIS()
+print('Test 16 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 16 fitness tests: 20 objects, 15 degree viz limits, xyz measurements')
+print(env.fitness_test())
 
-print('Test 15 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
-print('Test 15 fitness tests:')
-print(env.fitness_test)
-
-# !------------ Test 16 - simple env v2 - 20 objects, no viz limits, aer measurements
+# !------------ Test 17 - simple env v2 - 5 objects, no viz limits, aer measurements
 
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
+from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, mean_xyz, residual_z_aer
 from agents import agent_visible_random
 from envs.transformations import arcsec2rad
 
 P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
 
-R = np.diag((500**2, 500**2, 500**2))
+R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
 
 x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (500, 500, 500) # (1, 1, 1000)
+z_sigma = (1, 1, 1000) # (1, 1, 1000)
 
 kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
+          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
+          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
 env.seed(1)
@@ -546,89 +548,89 @@ done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
-env.plot_sigma_delta()
-env.plot_visibility()
-env.plot_anees()
-env.plot_autocorrelation() #x
-env.plot_map()
-env.plot_actions()
-env.plot_rewards()
-env.plot_innovation_bounds()
-env.plot_regimes()
-env.plot_NIS()
+print('Test 17 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
+print(env.fitness_test())
 
-print('Test 15 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
-print('Test 15 fitness tests:')
-print(env.fitness_test)
+# !------------ Test 18 - simple env v2 - 5 objects, 15 degree viz limits, aer measurements
 
-# !------------ Test 16 - simple env v2 - random action, no noise at init, INCLUDES viz limits
+import gym
+import numpy as np
+from tqdm import tqdm
+from datetime import datetime
+from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, mean_xyz, residual_z_aer
+from agents import agent_visible_random
+from envs.transformations import arcsec2rad
 
-P_0 = np.diag((1000**2, 1000**2, 1000**2, 10**2, 10**2, 10**2))
+P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1000**2))
+R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
 
-x_sigma = (0, 0, 0, 0, 0, 0) # (1000, 1000, 1000, 10, 10, 10)
+x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
 z_sigma = (1, 1, 1000) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 50, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma,
-          'z_sigma': z_sigma, 'q_sigma': 0.001, 'P_0': P_0, 'R': R, 'update_interval': 1,
-          'orbits': np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6}
+kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
+          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
+          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(0)
+env.seed(1)
 obs = env.reset()
-agent = agent_naive_random
+agent = agent_visible_random
 
 done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
-env.failed_filters()
-failing_objects = np.argwhere(env.delta_pos[env.i, :] > 10e5).flatten()
+print('Test 18 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 18 fitness tests: 5 objects, 15 degree viz limits, aer measurements')
+print(env.fitness_test())
 
-if failing_objects.shape[0] == 0:
-    env.plot_sigma_delta()
-else:
-    env.plot_sigma_delta(objects=failing_objects, save_path=None)
+# !------------ Test 19 - simple env v2 - 20 objects, 15 degree viz limits, aer measurements
 
-# !------------ Test 17 - simple env v2 - random action, includes noise, INCLUDES viz limits
+import gym
+import numpy as np
+from tqdm import tqdm
+from datetime import datetime
+from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, mean_xyz, residual_z_aer
+from agents import agent_visible_greedy
+from envs.transformations import arcsec2rad
 
-P_0 = np.diag((1000**2, 1000**2, 1000**2, 10**2, 10**2, 10**2))
+P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1000**2))
+R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
 
-x_sigma = (10000, 10000, 10000, 10, 10, 10) # (1000, 1000, 1000, 10, 10, 10)
+x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
 z_sigma = (1, 1, 1000) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 50, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma,
-          'z_sigma': z_sigma, 'q_sigma': 0.001, 'P_0': P_0, 'R': R, 'update_interval': 1,
-          'orbits': np.load('envs\\1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6}
+kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
+          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
+          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
+          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
+          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
 
 env = gym.make('ssa_tasker_simple-v2', **kwargs)
 env.seed(0)
 obs = env.reset()
-agent = agent_naive_random
+agent = agent_visible_greedy
 
 done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
-env.failed_filters()
-failing_objects = np.argwhere(env.delta_pos[env.i, :] > 10e5).flatten()
-
-if failing_objects.shape[0] == 0:
-    env.plot_sigma_delta()
-else:
-    env.plot_sigma_delta(objects=failing_objects, save_path=None)
+print('Test 19 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
+print('Test 19 fitness tests: 20 objects, 15 degree viz limits, aer measurements')
+print(env.fitness_test())
 
 print("Done")

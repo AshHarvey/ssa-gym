@@ -553,7 +553,6 @@ class SSA_Tasker_Env(gym.Env):
         else:
             plt.close()
 
-    @property
     def fitness_test(self):
         """
         Source: http://www.robots.ox.ac.uk/~ian/Teaching/Estimation/LectureNotes2.pdf
@@ -611,6 +610,7 @@ class SSA_Tasker_Env(gym.Env):
                        self.y[i, int(self.actions[i])])
 
         NIS = np.array(NIS)
+        NIS = NIS[~np.isnan(NIS)]
         alpha = 0.05
         ci = [alpha / 2, 1 - alpha / 2]
         nis_cr_points = stats.chi2.ppf(ci, df=len(self.y[0, 0]))
