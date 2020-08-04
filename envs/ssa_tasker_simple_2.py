@@ -436,6 +436,7 @@ class SSA_Tasker_Env(gym.Env):
         moving_average_plot(np.array(NIS), n=20, alpha=0.05, dof=len(self.z_true[0, 0]), style=None, title=title,
                             xlabel=xlabel, ylabel=ylabel, llabel=llabel, save_path=save_path, display=display)
 
+
     def plot_innovation_bounds(self, ID=None, save_path=None, display=True):
         if ID is None:
             innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
@@ -460,7 +461,6 @@ class SSA_Tasker_Env(gym.Env):
                    sharey=sharey,
                    save_path=save_path, display=display)
 
-    @property
     def innovation_bounds(self):
         innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
         st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
@@ -593,8 +593,10 @@ class SSA_Tasker_Env(gym.Env):
                                                        columns=clabels)
 
         inn_st_dev = np.sqrt([np.diag(self.S[i, self.actions[i]]) for i in range(1, self.n)])
-        inn_frac_sigma_bound = np.mean((innovation < inn_st_dev) * (innovation > -inn_st_dev), axis=0)
-        inn_frac_two_sigma_bound = np.mean((innovation < 2 * inn_st_dev) * (innovation > -2 * inn_st_dev), axis=0)
+        innovation_nonan = np.array([innovation[~np.isnan(innovation[:, i]), i] for i in range(len(innovation[0]))]).T
+        inn_st_dev_nonan = np.array([inn_st_dev[~np.isnan(inn_st_dev[:, i]), i] for i in range(len(inn_st_dev[0]))]).T
+        inn_frac_sigma_bound = np.mean((innovation_nonan < inn_st_dev_nonan) * (innovation_nonan > -inn_st_dev_nonan), axis=0)
+        inn_frac_two_sigma_bound = np.mean((innovation_nonan < 2 * inn_st_dev_nonan) * (innovation_nonan > -2 * inn_st_dev_nonan), axis=0)
         inn_frac_bound = np.round(np.stack((inn_frac_sigma_bound, inn_frac_two_sigma_bound)) * 100, 2)
         innovation_bound_test = pd.DataFrame(inn_frac_bound,
                                              index=['Test 1a: Innovation 1σ bound',
@@ -685,3 +687,4 @@ class SSA_Tasker_Env(gym.Env):
                                                'Durbin-Watson Statistic for Max per Obj'])
         dw_autocorr_test.name = 'Durbin-Watson Statistic for Innovation'
         return dw_autocorr_test
+

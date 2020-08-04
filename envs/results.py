@@ -436,7 +436,7 @@ def moving_average_plot(x, n=20, alpha=0.05, dof=1, style=None, title=None, xlab
         plt.plot(np.repeat(cr[1], len(x_bar)), color='blue', linestyle='--', linewidth=2,
                  label='Moving average confidence region, alpha = ' + str(alpha) + '; ' + str(np.round(contained*100, 2)) + '% contained')
         plt.plot(np.repeat(cr[0], len(x_bar)), color='blue', linestyle='--', linewidth=2)
-        points_contained = np.mean((x > cr_points[0])*(x < cr_points[1]))
+        points_contained = np.mean((x[~np.isnan(x)] > cr_points[0])*(x[~np.isnan(x)] < cr_points[1]))
         plt.plot(np.repeat(cr_points[1], len(x_bar)), color='red', linestyle='--', linewidth=2,
                  label='Point confidence region, alpha = ' + str(alpha) + '; ' + str(np.round(points_contained*100, 2)) + '% contained')
         plt.plot(np.repeat(cr_points[0], len(x_bar)), color='red', linestyle='--', linewidth=2)
