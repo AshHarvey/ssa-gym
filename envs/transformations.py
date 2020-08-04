@@ -268,12 +268,13 @@ def aer2uvw(aer):
     """
     # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
     # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+    # 2.2.2 Local Terrestrial Coordinates defined u, v, w
     az, el, r = aer
     u = r*cos(el)*cos(az)       # (eq 2.148)
     v = r*cos(el)*sin(az)       # (eq 2.148)
     w = r*sin(el)               # (eq 2.148)
-    enu = array([u, v, w])
-    return enu
+    uvw = array([u, v, w])
+    return uvw
 
 
 @njit
@@ -284,6 +285,7 @@ def uvw2aer(uvw):
     """
     # Ref: Geometric Reference Systems in Geodesy by Christopher Jekeli, Ohio State University, August 2016
     # https://kb.osu.edu/bitstream/handle/1811/77986/Geom_Ref_Sys_Geodesy_2016.pdf?sequence=1&isAllowed=y
+    # 2.2.2 Local Terrestrial Coordinates defined u, v, w
     u, v, w = uvw
     r = sqrt(sum(uvw**2))       # (eq 2.156)
     az = atan2(v, u)            # (eq 2.154)
