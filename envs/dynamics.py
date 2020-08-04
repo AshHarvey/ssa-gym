@@ -4,11 +4,11 @@ from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from numba import njit, jit
 from poliastro.core.propagation import markley, vallado, pimienta, gooding, danby, farnocchia,  mikkola, func_twobody
 from poliastro.core.elements import coe2rv
-from envs.transformations import _itrs2azel, ecef2aer, uvw2aer, aer2uvw, lla2ecef
+from envs.transformations import ecef2aer, uvw2aer, aer2uvw
 from poliastro.bodies import Earth
 import functools
 from astropy import _erfa as erfa
-from scipy.integrate import DOP853, solve_ivp, RK45
+from scipy.integrate import DOP853, solve_ivp
 from scipy.linalg import cholesky
 import pymap3d as pm
 
@@ -21,10 +21,19 @@ RE_eq = Earth.R.to_value(u.m)
 def ad_none(t0, u_, k_):
     return 0, 0, 0
 
+########################################################################################################################
+#  Calculate fx
+########################################################################################################################
 
 #@jit(['float64[::](float64[::],float64)'],nopython=True)
 @njit
-def fx_xyz_markley(x, dt, k=k):
+def fx_xyz_markley(x, dt, k: k):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -36,7 +45,15 @@ def fx_xyz_markley(x, dt, k=k):
 
 
 @njit
-def fx_xyz_vallado(x, dt, k=k, numiter=350):
+def fx_xyz_vallado(x, dt, k = k, numiter=350):
+    """
+    :type k: object
+    :param x:
+    :param dt:
+    :param k:
+    :param numiter:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -56,6 +73,12 @@ def fx_xyz_vallado(x, dt, k=k, numiter=350):
 
 @njit
 def fx_xyz_pimienta(x, dt, k=k):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -68,6 +91,14 @@ def fx_xyz_pimienta(x, dt, k=k):
 
 @njit
 def fx_xyz_gooding(x, dt, k=k, numiter=150, rtol=1e-8):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :param numiter:
+    :param rtol:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -80,6 +111,12 @@ def fx_xyz_gooding(x, dt, k=k, numiter=150, rtol=1e-8):
 
 @njit
 def fx_xyz_danby(x, dt, k=k):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -92,12 +129,24 @@ def fx_xyz_danby(x, dt, k=k):
 
 @njit
 def fx_xyz_farnocchia(x, dt, k=k):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :return:
+    """
     x_post = np.reshape(farnocchia(k, x[:3], x[3:], dt), 6)
     return x_post
 
 
 @njit
 def fx_xyz_mikkola(x, dt, k=k):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :return:
+    """
     r0 = x[:3]
     v0 = x[3:]
     tof = dt
@@ -109,11 +158,19 @@ def fx_xyz_mikkola(x, dt, k=k):
 
 
 def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwargs):
+    """
+    :param x:
+    :param dt:
+    :param k:
+    :param rtol:
+    :param events:
+    :param ad:
+    :param ad_kwargs:
+    :return:
+    """
     u0 = x
     tof = dt
-
     f_with_ad = functools.partial(func_twobody, k=k, ad=ad, ad_kwargs=ad_kwargs)
-
     result = solve_ivp(
         f_with_ad,
         (0, tof),
@@ -133,6 +190,9 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
 
     return result.sol(tof)
 
+########################################################################################################################
+#  Calculate hx
+########################################################################################################################
 
 #@jit(['float64[::](float64[::])'],nopython=True)
 def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, time=None):
@@ -140,18 +200,17 @@ def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, tim
     # where measurements are [azimuth, elevation]
     return x_gcrs[:3]
 
-
-def hx_aer_erfa_old(x_gcrs, trans_matrix, observer_lla, time=None, observer_itrs=None):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
-    x_itrs = trans_matrix @ x_gcrs[:3]
-    aer = _itrs2azel(observer_itrs, x_itrs)
-    return aer
-
-
 def hx_aer_erfa(x_gcrs, trans_matrix, observer_lla, observer_itrs, time=None):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
+    """
+    :param x_gcrs:
+    :param trans_matrix:
+    :param observer_lla:
+    :param observer_itrs:
+    :param time:
+    :return:
+    """
     x_itrs = trans_matrix @ x_gcrs[:3]
     aer = ecef2aer(observer_lla, x_itrs, observer_itrs)
     return aer
@@ -160,6 +219,14 @@ def hx_aer_erfa(x_gcrs, trans_matrix, observer_lla, observer_itrs, time=None):
 def hx_aer_astropy(x_gcrs, time, observer_lla=None, trans_matrix=None, observer_itrs=None):
     # measurement function - convert state into a measurement
     # where measurements are [azimuth, elevation]
+    """
+    :param x_gcrs:
+    :param time:
+    :param observer_lla:
+    :param trans_matrix:
+    :param observer_itrs:
+    :return:
+    """
     object = SkyCoord(x=x_gcrs[0] * u.m, y=x_gcrs[1] * u.m, z=x_gcrs[2] * u.m, frame='gcrs',
                    representation_type='cartesian', obstime=time)
     if observer_itrs is None:

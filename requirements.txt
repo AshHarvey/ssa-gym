@@ -1,3 +1,4 @@
+pymap3d
 numpy
 scipy
 numba
