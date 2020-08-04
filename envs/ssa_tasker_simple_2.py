@@ -39,7 +39,7 @@ sample_orbits = np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.n
 
 
 class SSA_Tasker_Env(gym.Env):
-    metadata = {'render.modes': ['human']}
+    #metadata = {'render.modes': ['human']}
     RE = Earth.R_mean.to_value(u.m)  # radius of earth
 
     def __init__(self, steps=2880, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
@@ -80,7 +80,7 @@ class SSA_Tasker_Env(gym.Env):
         # standard deviation of noise added to initial state estimates; [m, m, m, m/s, m/s, m/s]
         self.x_sigma = np.array(x_sigma)
         self.Q = Q_noise_fn(dim=2, dt=self.dt, var=q_sigma ** 2, block_size=3, order_by_dim=False)
-        self.eops = get_eops()
+        self.eop = get_eops()
         self.fx = fx
         self.hx = hx
         self.mean_z = mean_z
@@ -103,8 +103,8 @@ class SSA_Tasker_Env(gym.Env):
         self.x_filter = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
-        self.time = [self.t_0 + timedelta(seconds=self.dt) * i for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
+        self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eop)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation
@@ -217,7 +217,7 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['perform predictions'] += e - s
         """update with observation"""
         s = time.time()
-        if self.i % self.update_interval == 0:
+        if (self.i % self.update_interval) == 0:
             if not (a in self.failed_filters_id):
                 hx_kwargs = {"trans_matrix": self.trans_matrix[self.i],
                              "observer_itrs": self.obs_itrs,
@@ -253,6 +253,7 @@ class SSA_Tasker_Env(gym.Env):
         if self.i + 1 >= self.n:
             done = True
         e = time.time()
+
         self.runtime['Observations and Reward'] += e - s
         step_e = time.time()
         self.runtime['step'] += step_e - step_s

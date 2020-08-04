@@ -424,134 +424,7 @@ print("Test 12a: step ", max_step, " uncertainty after ", int(max_step/obs_inter
       np.round(np.sqrt(np.sum(np.diag(ukf.P)[:3])),4), " meters, ", np.round(np.sqrt(np.sum(np.diag(ukf.P)[3:])),4), " meters per second")
 
 # !------------ Test 13 - FilterPy Az El Updates with Uncertainty and Multiple RSOs
-from filterpy.kalman import MerweScaledSigmaPoints as SigmasPoints
-from filterpy.kalman.UKF import UnscentedKalmanFilter
-from filterpy.common import Q_discrete_white_noise as Q_noise_fn
-from envs.dynamics import residual_z_aer as residual_z, mean_z_enu as mean_z
-from envs.dynamics import fx_xyz_markley as fx, hx_aer_erfa as hx
-from envs.transformations import lla2ecef, gcrs2irts_matrix_a as gcrs2irts_matrix, get_eops
-from datetime import datetime, timedelta
-import numpy as np
-from envs.dynamics import init_state_vec
-from tqdm import tqdm
-from copy import copy
-import time
-
-arcsec2rad = np.pi/648000
-
-# Sim Configurable Setting:
-max_step = 2880
-obs_interval = 50
-rso_count = 50
-observer = (38.828198, -77.305352, 20.0) # lat (deg), lon (deg), height (meters)
-random_state = np.random.RandomState(seed=0)
-x_init = [init_state_vec(random_state=random_state) for i in range(rso_count)] # 3 x km, 3 x km/s for each RSO
-t_init = datetime(year=2007, month=4, day=5, hour=12, minute=0, second=0)
-eop = get_eops()
-
-# Filter Configurable Settings:
-dim_x = 6
-dim_z = 3
-dt = 30.0
-R = np.diag([1, 1, 1000]) # arc second, arc second, meters
-Q = Q_noise_fn(dim=2, dt=dt, var=0.0001**2, block_size=3, order_by_dim=False)
-P_init = [np.diag([1000,  1000,  1000, 1, 1,  1]) for i in range(rso_count)]
-alpha = 0.000001
-beta = 2.0
-kappa = 3-6
-
-# Derived Settings:
-x_true = np.copy(x_init)
-np.random.seed(50)
-x_filter = copy(x_init)
-for i in range(len(x_init)):
-    x_filter[i] = x_init[i] + np.random.normal(0,np.sqrt(np.diag(P_init[i])))
-t = [t_init]
-step = [0]
-observer_lla = np.array([np.radians(observer[0]), np.radians(observer[1]), observer[2]])
-observer_itrs = lla2ecef(observer_lla) # meter
-
-# FilterPy Configurable Settings:
-filters = []
-for i in range(rso_count):
-    filters.append(UnscentedKalmanFilter(dim_x, dim_z, dt, hx, fx, points=SigmasPoints(n=6, alpha=0.001, beta=2., kappa=3-6)))
-    filters[-1].x = np.copy(x_filter[i])
-    filters[-1].P = np.copy(P_init[i])
-    filters[-1].Q = np.copy(Q)
-    filters[-1].R = np.copy(R)
-    filters[-1].residual_z = residual_z
-    filters[-1].z_mean = mean_z
-
-fault = np.repeat(False, rso_count)
-fault_step = np.repeat(np.nan, rso_count)
-fault_type = np.repeat("No Issue", rso_count)
-z_true = [np.copy(xx[:3]) for xx in x_true]
-trans_matrix = []
-z_filter = np.copy(z_true)
-z_filters = []
-trans_matrix = []
-
-# run the ground truth
-for i in tqdm(range(max_step)):
-    # step truth forward
-    step.append(step[-1] + 1)
-    t.append(t[-1] + timedelta(seconds=dt))
-    for j in range(rso_count):
-        x_true[j] = fx(x_true[j], dt)
-    # Check if obs should be taken
-    z_noise = [np.random.normal(0, np.sqrt(np.diag(R))) * [arcsec2rad,arcsec2rad,1] for i in range(rso_count)]
-    trans_matrix.append(gcrs2irts_matrix(t[-1], eop))
-    hx_kwargs = {"trans_matrix": trans_matrix[-1], "observer_lla": observer_lla, "observer_itrs": observer_itrs}
-    for j in range(rso_count):
-        z_true[j] = hx(x_true[j], **hx_kwargs)
-        z_filter[j] = z_true[j] + z_noise[j]
-    z_filters.append(copy(z_filter))
-
-start13 = time.time()
-# run FilterPy
-for i in tqdm(range(max_step)):
-    # step FilterPy forward with predict
-    for j in range(rso_count):
-        if not fault[j]:
-            try:
-                filters[j].predict(dt)
-            except:
-                # print("Matrix is not positive definite error on step ", i+1, " on RSO ",j," with x: ", np.round(filters[j].x_prior,4), ", P: ", np.round(np.diag(filters[j].P_prior),4))
-                fault[j] = True
-                fault_step[j] = i+1
-                fault_type[j] = "Matrix is not positive definite"
-
-    # Check if obs should be taken
-    if i+1 % obs_interval == 0 or i == 0:
-        # get obs:
-        hx_kwargs = {"trans_matrix": trans_matrix[i], "observer_lla": observer_lla, "observer_itrs": observer_itrs}
-        # update FilterPy
-        for j in range(rso_count):
-            filters[j].update(z_filters[i][j], **hx_kwargs)
-
-end13 = time.time()
-
-successful = fault == False
-successful = list(np.nonzero(successful * range(50))[0])
-unsuccessful = list(np.nonzero(fault * range(50))[0])
-
-if np.sum(fault) == 0:
-    print("Test 13: Successful with a FilterPy runtime of ", np.round(end13 - start13, 4), " seconds and 0 failed filters")
-else:
-    print("Test 13: Finished with a FilterPy runtime of ", np.round(end13 - start13, 4), " seconds and ", np.sum(fault), " filters failed; objects: ", unsuccessful)
-
-from scipy.spatial import distance
-
-error_pos = [distance.euclidean(filters[i].x[:3], x_true[i][:3]) for i in successful]
-error_vel = [distance.euclidean(filters[i].x[3:], x_true[i][3:]) for i in successful]
-uncert_pos = [np.round(np.sqrt(np.sum(np.diag(filters[i].P)[:3])), 4) for i in successful]
-uncert_vel = [np.round(np.sqrt(np.sum(np.diag(filters[i].P)[3:])), 4) for i in successful]
-
-print("Test 13a: FilterPy Positional error in meters (min, max, average): ", np.round(np.min(error_pos),2), ", ", np.round(np.max(error_pos), 2), ", ", np.round(np.average(error_pos),2))
-print("Test 13b: FilterPy Velocity error in meters / second (min, max, average): ", np.round(np.min(error_vel),2), ", ", np.round(np.max(error_vel), 2), ", ", np.round(np.average(error_vel),2))
-print("Test 13c: FilterPy Positional uncertainty in meters (min, max, average): ", np.round(np.min(uncert_pos),2), ", ", np.round(np.max(uncert_pos), 2), ", ", np.round(np.average(uncert_pos),2))
-print("Test 13d: FilterPy Velocity uncertainty in meters / second (min, max, average): ", np.round(np.min(uncert_vel),2), ", ", np.round(np.max(uncert_vel), 2), ", ", np.round(np.average(uncert_vel),2))
-
+print("Test 13 Deprecated")
 # !------------ Test 14 - simple env v2 - 20 objects, no viz limits, xyz measurements
 
 import gym
@@ -587,7 +460,7 @@ for i in tqdm(range(env.n)):
         obs, reward, done, _ = env.step(action)
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
-print('Test 14 fitness tests:')
+print('Test 14 fitness tests: 20 objects, no viz limits, xyz measurements')
 print(env.fitness_test)
 
 
