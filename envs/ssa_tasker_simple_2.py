@@ -184,6 +184,11 @@ class SSA_Tasker_Env(gym.Env):
         return self.obs[0]
 
     def step(self, a):
+        """
+        Desc : Default function for step in gym environment
+        :param a: Agent
+        :return: observations, reward, and done
+        """
         step_s = time.time()
         s = time.time()
         assert self.action_space.contains(a), "%r (%s) invalid" % (a, type(a))  # check for valid action

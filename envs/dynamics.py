@@ -22,17 +22,18 @@ def ad_none(t0, u_, k_):
     return 0, 0, 0
 
 ########################################################################################################################
-#  Calculate fx
+#  Calculate fx - The main purpose of poliastro.core.propagation is to propagate a body along its orbit.
 ########################################################################################################################
 
 #@jit(['float64[::](float64[::],float64)'],nopython=True)
 @njit
 def fx_xyz_markley(x, dt, k=k):
     """
-    :param x:
-    :param dt:
-    :param k:
-    :return:
+    desc: Solves the kepler problem by a non iterative method. Relative error is around 1e-18, only limited by machine double-precission errors.
+    :param x: Position and velocity Vector
+    :param dt: Time of flight
+    :param k: Standard gravitational parameter of the attractor.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -47,12 +48,12 @@ def fx_xyz_markley(x, dt, k=k):
 @njit
 def fx_xyz_vallado(x, dt, k = k, numiter=350):
     """
-    :type k: object
-    :param x:
-    :param dt:
-    :param k:
-    :param numiter:
-    :return:
+    desc: Solves Kepler’s Equation by applying a Newton-Raphson method.
+    :param x: Position and velocity Vector
+    :param dt: Array of times to propagate.
+    :param k: Standard gravitational parameter of the attractor.
+    :param numiter: Number of iterations
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -74,10 +75,11 @@ def fx_xyz_vallado(x, dt, k = k, numiter=350):
 @njit
 def fx_xyz_pimienta(x, dt, k=k):
     """
-    :param x:
-    :param dt:
-    :param k:
-    :return:
+    desc: Raw algorithm for Adonis’ Pimienta and John L. Crassidis 15th order polynomial Kepler solver.
+    :param x: Position and velocity Vector
+    :param dt: time of flight
+    :param k: Standard gravitational parameter of the attractor.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -92,12 +94,14 @@ def fx_xyz_pimienta(x, dt, k=k):
 @njit
 def fx_xyz_gooding(x, dt, k=k, numiter=150, rtol=1e-8):
     """
-    :param x:
-    :param dt:
-    :param k:
-    :param numiter:
-    :param rtol:
-    :return:
+    desc :Solves the Elliptic Kepler Equation with a cubic convergence and accuracy better than 10e-12 rad is normally achieved.
+    It is not valid for eccentricities equal or greater than 1.0.
+    :param x: Position and velocity Vector.
+    :param dt: Time of flight
+    :param k: Standard gravitational parameter of the attractor.
+    :param numiter: number of iterations
+    :param rtol: Relative error for accuracy of the method.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -112,10 +116,11 @@ def fx_xyz_gooding(x, dt, k=k, numiter=150, rtol=1e-8):
 @njit
 def fx_xyz_danby(x, dt, k=k):
     """
-    :param x:
-    :param dt:
-    :param k:
-    :return:
+    desc: Kepler solver for both elliptic and parabolic orbits based on Danby’s algorithm.
+    :param x: Position and velocity Vector
+    :param dt: Array of times to propagate.
+    :param k: Standard gravitational parameter of the attractor.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -130,10 +135,11 @@ def fx_xyz_danby(x, dt, k=k):
 @njit
 def fx_xyz_farnocchia(x, dt, k=k):
     """
-    :param x:
-    :param dt:
-    :param k:
-    :return:
+    Desc: Propagates orbit using mean motion.
+    :param x: Position and velocity Vector
+    :param dt: Array of times to propagate.
+    :param k: Standard gravitational parameter of the attractor.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     x_post = np.reshape(farnocchia(k, x[:3], x[3:], dt), 6)
     return x_post
@@ -142,9 +148,10 @@ def fx_xyz_farnocchia(x, dt, k=k):
 @njit
 def fx_xyz_mikkola(x, dt, k=k):
     """
-    :param x:
-    :param dt:
-    :param k:
+    desc: Raw algorithm for Mikkola’s Kepler solver.
+    :param x: Position and velocity Vector
+    :param dt: Array of times to propagate.
+    :param k: Standard gravitational parameter of the attractor.
     :return:
     """
     r0 = x[:3]
@@ -159,26 +166,28 @@ def fx_xyz_mikkola(x, dt, k=k):
 
 def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwargs):
     """
-    :param x:
-    :param dt:
-    :param k:
+    desc: Differential equation for the initial value two body problem.This function follows Cowell’s formulation.
+    :param x: Six component state vector [x, y, z, vx, vy, vz] (km, km/s).
+    :param dt: Array of times to propagate.
+    :param k: Standard gravitational parameter of the attractor.
     :param rtol:
-    :param events:
-    :param ad:
-    :param ad_kwargs:
-    :return:
+    :param events: events
+    :param ad: Non Keplerian acceleration (km/s2).
+    :param ad_kwargs: perturbation parameters passed to ad.
+    :return: Propogated position  and velocity vectors(1x3)
     """
     u0 = x
     tof = dt
     f_with_ad = functools.partial(func_twobody, k=k, ad=ad, ad_kwargs=ad_kwargs)
+    # solving differential equation
     result = solve_ivp(
-        f_with_ad,
-        (0, tof),
-        u0,
-        rtol=rtol,
-        atol=1e-12,
-        method=DOP853,
-        dense_output=True,
+        f_with_ad, # function fun(t,y)
+        (0, tof), # interval of integration
+        u0, # initial state
+        rtol=rtol, # relative tolerance
+        atol=1e-12, #absolute tolerance
+        method=DOP853, # explicit Rung-Kutta method of order 8
+        dense_output=True, # whether to compute a continuous solution
         events=events,
     )
     if not result.success:
@@ -188,7 +197,7 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
         min(result.t_events[0]) if result.t_events and len(result.t_events[0]) else None
     )
 
-    return result.sol(tof)
+    return result.sol(tof) # ODE solution for the time instance
 
 ########################################################################################################################
 #  Calculate hx
@@ -196,14 +205,20 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
 
 #@jit(['float64[::](float64[::])'],nopython=True)
 def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, time=None):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
+    """
+    desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]
+    :param x_gcrs:
+    :param trans_matrix:
+    :param observer_lla:
+    :param observer_itrs:
+    :param time:
+    :return:
+    """
     return x_gcrs[:3]
 
 def hx_aer_erfa(x_gcrs, trans_matrix, observer_lla, observer_itrs, time=None):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
     """
+    desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]
     :param x_gcrs:
     :param trans_matrix:
     :param observer_lla:
@@ -217,9 +232,8 @@ def hx_aer_erfa(x_gcrs, trans_matrix, observer_lla, observer_itrs, time=None):
 
 
 def hx_aer_astropy(x_gcrs, time, observer_lla=None, trans_matrix=None, observer_itrs=None):
-    # measurement function - convert state into a measurement
-    # where measurements are [azimuth, elevation]
     """
+    desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]
     :param x_gcrs:
     :param time:
     :param observer_lla:
@@ -315,14 +329,24 @@ def mean_z_unit_vector(sigmas, Wm):
 
 
 def mean_z_enu(sigmas, Wm):
-    # transforms points to east, north, up; takes cartesian mean of enu; transforms enu back to aer
+    """
+    desc:transforms points to east, north, up; takes cartesian mean of enu; transforms enu back to aer
+    :param sigmas:
+    :param Wm:
+    :return:
+    """
     enu_mean = np.average(np.array([pm.aer2enu(*sigma, deg=False) for sigma in sigmas]), axis=0, weights=Wm)
     return np.array(pm.enu2aer(*enu_mean, deg=False))
 
 
 @njit
 def mean_z_uvw(sigmas, Wm):
-    # transforms points to east, north, up; takes cartesian mean of enu; transforms enu back to aer
+    """
+    desc: transforms points to east, north, up; takes cartesian mean of enu; transforms enu back to aer
+    :param sigmas:
+    :param Wm:
+    :return:
+    """
     aers = np.empty(shape=sigmas.shape)
     for i in range(len(aers)):
         aers[i] = aer2uvw(sigmas[i])

@@ -517,6 +517,13 @@ def bound_plot(y, st_dev, style=None, title=None, xlabel=None, ylabel=None, ysca
 
 
 def map_plot(x_filter, x_true, trans_matrix, observer):
+    """
+    :param x_filter: Predicted filters
+    :param x_true: Ground truth
+    :param trans_matrix: Transition matrix : Stochastic Matrix
+    :param observer: Given Observer coordinates
+    :return: Map plot showing predicted path vs groundtruth
+    """
     n, m, x_dim = x_filter.shape
     lat_filter = np.empty((n, m))
     lon_filter = np.empty((n, m))

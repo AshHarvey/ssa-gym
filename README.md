@@ -1,4 +1,5 @@
 # ssa-gym
+
 This is a repository of an OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
 
 Original repository author : Maj. Ashton Harvey, Devayani Pawar
@@ -31,13 +32,18 @@ Python 3.6, and other common packages listed in `requirements.txt`.
 
 #### Key Concepts used:
 - Deep Reinforcement Learning : https://spinningup.openai.com/en/latest/
+- Orbital Dynamics: 
+- Kalman Filter for uncertain information: 
+  - Unscented Kalman Filter
 
 #### Libraries used
 - Reinforcement Learning in python: https://gym.openai.com/docs/
-- Astropy - A Community Python Library for Astronomy: https://www.astropy.org/
 - FilterPy - Python library that implements a number of Bayesian filters, most notably Kalman filters: https://filterpy.readthedocs.io/en/latest/
-- Numba - Numba is an open source JIT compiler that translates a subset
- of Python and NumPy code into fast machine code: http://numba.pydata.org/
+- Numba - An open source JIT compiler that translates a subset of Python and NumPy code into fast machine code: http://numba.pydata.org/
+- Astropy - A Community Python Library for Astronomy: https://www.astropy.org/
+- Poliastro - An open source collection of Python subroutines for solving problems in Astrodynamics and Orbital Mechanics: 
+https://docs.poliastro.space/en/stable/about.html 
+
 
 ## Viz
 
