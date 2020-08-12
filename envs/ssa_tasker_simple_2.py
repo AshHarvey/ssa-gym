@@ -7,7 +7,8 @@ from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
 from poliastro.core.elements import rv2coe
 from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_a, get_eops, ecef2aer, ecef2lla
-from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, residual_z_aer, robust_cholesky
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z
+from envs.dynamics import robust_cholesky
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
 from envs.results import plot_histogram, plot_orbit_vis, plot_regimes, reward_proportional_trinary_true
 from envs.results import moving_average_plot, bound_plot, map_plot
@@ -35,19 +36,18 @@ seconds: s
 unitless: u
 """
 
-sample_orbits = np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
+config = {'steps': 480, 'rso_count': 10, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': 15,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'aer',  'z_sigma': (1, 1, 1e3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag(([arcsec2rad**2]*2 + [1e3**2])), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_z, 'residual_z': residual_z, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
 class SSA_Tasker_Env(gym.Env):
-    #metadata = {'render.modes': ['human']}
-    RE = Earth.R_mean.to_value(u.m)  # radius of earth
-
-    def __init__(self, steps=2880, rso_count=50, time_step=30.0, t_0=datetime(2020, 5, 4, 0, 0, 0),
-                 obs_limit=15, observer=(38.828198, -77.305352, 20.0), x_sigma=(1000, 1000, 1000, 10, 10, 10),
-                 z_sigma=(1, 1, 1000), q_sigma=0.001, P_0=None, R=None, update_interval=1, orbits=sample_orbits,
-                 fx=fx_xyz_farnocchia, hx=hx_aer_erfa, alpha=0.001, beta=2., kappa=3 - 6, mean_z=mean_z_uvw,
-                 residual_z=residual_z_aer, msqrt=robust_cholesky, obs_type='aer'):
-        super(SSA_Tasker_Env, self).__init__()
+    # metadata = {'render.modes': ['human']}
+    def __init__(self, config=config):
+        # super(SSA_Tasker_Env, self).__init__()
         s = time.time()
         self.runtime = {'__init__': 0, 'reset': 0, 'step': 0, 'step prep': 0, 'propagate next true state': 0,
                         'perform predictions': 0, 'update with observation': 0, 'Observations and Reward': 0,
@@ -55,50 +55,50 @@ class SSA_Tasker_Env(gym.Env):
                         'failed_filters': 0, 'plot_sigma_delta': 0, 'plot_rewards': 0, 'plot_anees': 0,
                         'plot_actions': 0, 'all_true_obs': 0, 'plot_visibility': 0}
         """Simulation configuration"""
-        self.t_0 = t_0  # time at start of simulation
-        self.dt = time_step  # length of time steps [s]
-        self.n = steps  # max run steps
-        self.m = rso_count  # number of Resident Space Object (RSO) to include in the simulation
-        self.obs_limit = np.radians(obs_limit)  # don't observe objects below this elevation [rad]
+        self.t_0 = config['t_0']  # time at start of simulation
+        self.dt = config['time_step']  # length of time steps [s]
+        self.n = config['steps']  # max run steps
+        self.m = config['rso_count']  # number of Resident Space Object (RSO) to include in the simulation
+        self.obs_limit = np.radians(config['obs_limit'])  # don't observe objects below this elevation [rad]
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
-        self.orbits = orbits  # orbits to sample from
-        self.obs_lla = np.array(observer) * [deg2rad, deg2rad, 1]  # lat, lon, height (deg, deg, m)
+        self.orbits = config['orbits']  # orbits to sample from
+        self.obs_lla = np.array(config['observer']) * [deg2rad, deg2rad, 1]  # lat, lon, height (deg, deg, m)
         self.obs_itrs = lla2ecef(self.obs_lla)  # ITRS (m)
-        self.update_interval = update_interval  # how often an observation should be taken
+        self.update_interval = config['update_interval']  # how often an observation should be taken
         self.i = 0
         """Filter configuration"""
         # standard deviation of noise added to observations [rad, rad, m]
-        self.obs_type = obs_type
+        self.obs_type = config['obs_type']
         if self.obs_type == 'aer':
-            self.z_sigma = z_sigma * np.array([arcsec2rad, arcsec2rad, 1])
+            self.z_sigma = config['z_sigma'] * np.array([arcsec2rad, arcsec2rad, 1])
         elif self.obs_type == 'xyz':
-            self.z_sigma = z_sigma
+            self.z_sigma = config['z_sigma']
         else:
-            print('Invalid Observation Type: ' + str(obs_type))
+            print('Invalid Observation Type: ' + str(config['obs_type']))
             exit()
         # standard deviation of noise added to initial state estimates; [m, m, m, m/s, m/s, m/s]
-        self.x_sigma = np.array(x_sigma)
-        self.Q = Q_noise_fn(dim=2, dt=self.dt, var=q_sigma ** 2, block_size=3, order_by_dim=False)
+        self.x_sigma = np.array(config['x_sigma'])
+        self.Q = Q_noise_fn(dim=2, dt=self.dt, var=config['q_sigma'] ** 2, block_size=3, order_by_dim=False)
         self.eops = get_eops()
-        self.fx = fx
-        self.hx = hx
-        self.mean_z = mean_z
-        self.residual_z = residual_z
-        self.msqrt = msqrt
-        self.alpha, self.beta, self.kappa = alpha, beta, kappa  # sigma point configuration parameters
+        self.fx = config['fx']
+        self.hx = config['hx']
+        self.mean_z = config['mean_z']
+        self.residual_z = config['residual_z']
+        self.msqrt = config['msqrt']
+        self.alpha, self.beta, self.kappa = config['alpha'], config['beta'], config['kappa']  # sigma point configuration parameters
         """Prep arrays"""
         # variables for the filter
-        x_dim = 6
-        z_dim = 3
-        if P_0 is None:
+        x_dim = int(6)
+        z_dim = int(3)
+        if config['P_0'] is None:
             self.P_0 = np.copy(np.diag(self.x_sigma ** 2))  # Assumed covariance of the estimates at simulation start
         else:
-            self.P_0 = np.copy(P_0)
-        if R is None:
+            self.P_0 = np.copy(config['P_0'])
+        if config['R'] is None:
             self.R = np.diag(self.z_sigma ** 2)  # Noise added to the filter during observation updates
         else:
-            self.R = np.copy(R)
+            self.R = np.copy(config['R'])
         self.x_true = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
         self.x_filter = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
@@ -124,7 +124,7 @@ class SSA_Tasker_Env(gym.Env):
         self.obs_taken = np.empty(self.n,
                                   dtype=bool)  # prep variable for keeping track of which obs were actually taken
         self.x_failed = np.array([1e20, 1e20, 1e20, 1e12, 1e12, 1e12])  # failed filter will be set to this value
-        self.P_failed = np.diag([1e10, 1e10, 1e10, 1e5, 1e5, 1e5])  # failed filter will be set to this value
+        self.P_failed = np.diag([1e20, 1e20, 1e20, 1e12, 1e12, 1e12])  # failed filter will be set to this value
         self.nees = np.empty((self.n, self.m))  # used for normalized estimation error squared (NEES) and its average
         self.visibility = []  # used to store a log of visible objects at each time step
         self.sigmas_h = np.empty((self.n, x_dim * 2 + 1, z_dim))  # used to store sigmas points used in updates
@@ -397,7 +397,7 @@ class SSA_Tasker_Env(gym.Env):
         aer = []
         for i in range(self.n):
             for j in range(self.m):
-                aer.append(hx_aer_erfa(self.x_true[i, j, :3], self.trans_matrix[i], self.obs_lla, self.obs_itrs))
+                aer.append(hx(self.x_true[i, j, :3], self.trans_matrix[i], self.obs_lla, self.obs_itrs))
         aer = np.array(aer)
         aer = np.reshape(aer, (self.n, self.m, 3))
         e = time.time()
@@ -693,4 +693,3 @@ class SSA_Tasker_Env(gym.Env):
                                                'Durbin-Watson Statistic for Max per Obj'])
         dw_autocorr_test.name = 'Durbin-Watson Statistic for Innovation'
         return dw_autocorr_test
-
