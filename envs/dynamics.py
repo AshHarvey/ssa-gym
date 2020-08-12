@@ -152,7 +152,7 @@ def fx_xyz_mikkola(x, dt, k=k):
     :param x: Position and velocity Vector
     :param dt: Array of times to propagate.
     :param k: Standard gravitational parameter of the attractor.
-    :return:
+    :return: Propogated position  and velocity vectors(1x3)
     """
     r0 = x[:3]
     v0 = x[3:]
@@ -181,13 +181,13 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
     f_with_ad = functools.partial(func_twobody, k=k, ad=ad, ad_kwargs=ad_kwargs)
     # solving differential equation
     result = solve_ivp(
-        f_with_ad, # function fun(t,y)
-        (0, tof), # interval of integration
-        u0, # initial state
-        rtol=rtol, # relative tolerance
-        atol=1e-12, #absolute tolerance
-        method=DOP853, # explicit Rung-Kutta method of order 8
-        dense_output=True, # whether to compute a continuous solution
+        f_with_ad,              # function fun(t,y)
+        (0, tof),               # interval of integration
+        u0,                     # initial state
+        rtol=rtol,              # relative tolerance
+        atol=1e-12,             # absolute tolerance
+        method=DOP853,          # explicit Rung-Kutta method of order 8
+        dense_output=True,      # whether to compute a continuous solution
         events=events,
     )
     if not result.success:
@@ -207,10 +207,10 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
 def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, time=None):
     """
     desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]
-    :param x_gcrs:
-    :param trans_matrix:
-    :param observer_lla:
-    :param observer_itrs:
+    :param x_gcrs:          means for all objects at each time step
+    :param trans_matrix:    Transition matrix
+    :param observer_lla:    Observer coordinates
+    :param observer_itrs:   Observer coordinates in itrs (meters)
     :param time:
     :return:
     """
@@ -219,12 +219,12 @@ def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, tim
 def hx_aer_erfa(x_gcrs, trans_matrix, observer_lla, observer_itrs, time=None):
     """
     desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]
-    :param x_gcrs:
-    :param trans_matrix:
-    :param observer_lla:
-    :param observer_itrs:
+    :param x_gcrs:          means for all objects at each time step
+    :param trans_matrix:    Transition matrix
+    :param observer_lla:    Observer coordinates
+    :param observer_itrs:   Observer coordinates in itrs (meters)
     :param time:
-    :return:
+    :return: array[azimuth, elevation, slant]
     """
     x_itrs = trans_matrix @ x_gcrs[:3]
     aer = ecef2aer(observer_lla, x_itrs, observer_itrs)
@@ -238,8 +238,8 @@ def hx_aer_astropy(x_gcrs, time, observer_lla=None, trans_matrix=None, observer_
     :param time:
     :param observer_lla:
     :param trans_matrix:
-    :param observer_itrs:
-    :return:
+    :param observer_itrs:   Observer coordinates in itrs (meters)
+    :return: array[azimuth, elevation, slant]
     """
     object = SkyCoord(x=x_gcrs[0] * u.m, y=x_gcrs[1] * u.m, z=x_gcrs[2] * u.m, frame='gcrs',
                    representation_type='cartesian', obstime=time)
@@ -345,7 +345,7 @@ def mean_z_uvw(sigmas, Wm):
     desc: transforms points to east, north, up; takes cartesian mean of enu; transforms enu back to aer
     :param sigmas:
     :param Wm:
-    :return:
+    :return: modified array[azimuth, elevation, slant]
     """
     aers = np.empty(shape=sigmas.shape)
     for i in range(len(aers)):

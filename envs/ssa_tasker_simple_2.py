@@ -35,8 +35,9 @@ radians: rad
 seconds: s
 unitless: u
 """
+sample_orbits = np.load('envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
+#sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
 config = {'steps': 480, 'rso_count': 10, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': 15,
           'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'aer',  'z_sigma': (1, 1, 1e3),
@@ -55,16 +56,18 @@ class SSA_Tasker_Env(gym.Env):
                         'failed_filters': 0, 'plot_sigma_delta': 0, 'plot_rewards': 0, 'plot_anees': 0,
                         'plot_actions': 0, 'all_true_obs': 0, 'plot_visibility': 0}
         """Simulation configuration"""
-        self.t_0 = config['t_0']  # time at start of simulation
-        self.dt = config['time_step']  # length of time steps [s]
-        self.n = config['steps']  # max run steps
-        self.m = config['rso_count']  # number of Resident Space Object (RSO) to include in the simulation
+        self.t_0 = config['t_0']                # time at start of simulation
+        self.dt = config['time_step']           # length of time steps [s]
+        self.n = config['steps']                # max run steps
+        self.m = config['rso_count']            # number of Resident Space Object (RSO) to include in the simulation
         self.obs_limit = np.radians(config['obs_limit'])  # don't observe objects below this elevation [rad]
+
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
-        self.orbits = config['orbits']  # orbits to sample from
-        self.obs_lla = np.array(config['observer']) * [deg2rad, deg2rad, 1]  # lat, lon, height (deg, deg, m)
-        self.obs_itrs = lla2ecef(self.obs_lla)  # ITRS (m)
+
+        self.orbits = config['orbits']              # orbits to sample from
+        self.obs_lla = np.array(config['observer']) * [deg2rad, deg2rad, 1]  # Observer coordinates - lat, lon, height (deg, deg, m)
+        self.obs_itrs = lla2ecef(self.obs_lla)      # Observer coordinates in ITRS (m)
         self.update_interval = config['update_interval']  # how often an observation should be taken
         self.i = 0
         """Filter configuration"""
@@ -490,14 +493,22 @@ class SSA_Tasker_Env(gym.Env):
 
         ax.axis("off")
 
-    def plot_map(self, objects='All', timesteps='All'):
+    def plot_map(self, objects=np.array([]), timesteps='All'):
+        """
+        :param objects:  plot specific objects to locate different orbits (GEO, MEO , LEO etc)
+        :param timesteps: All steps
+        :return: Map plot for all orbits showing uncertainty vs true
+        """
 
         if timesteps == 'All':
             timesteps = [0, len(self.x_filter)]
-        if objects == 'All':
+        if objects.shape[0] == 0:
             objects = [0, len(self.x_filter[0])]
-        x_filter = self.x_filter[timesteps[0]:timesteps[1], objects[0]:objects[1]]
-        x_true = self.x_true[timesteps[0]:timesteps[1], objects[0]:objects[1]]
+            x_filter = self.x_filter[timesteps[0]:timesteps[1], objects[0]:objects[1]]
+            x_true = self.x_true[timesteps[0]:timesteps[1], objects[0]:objects[1]]
+        else:
+            x_filter = self.x_filter[timesteps[0]:timesteps[1], objects[:]]
+            x_true = self.x_true[timesteps[0]:timesteps[1], objects[:]]
         map_plot(x_filter, x_true, self.trans_matrix, self.obs_lla)
 
     @property
@@ -639,19 +650,9 @@ class SSA_Tasker_Env(gym.Env):
     @property
     def innovation_dw_test(self):
         """
-        source: https://www.statsmodels.org/stable/_modules/statsmodels/stats/stattools.html#durbin_watson
+        concept source: https://www.statsmodels.org/stable/_modules/statsmodels/stats/stattools.html#durbin_watson
         Calculates the Durbin-Watson statistic
-
-        Parameters
-        ----------
-        resids : array_like
-
-        Returns
-        -------
-        dw : float, array_like
-            The Durbin-Watson statistic.
-
-        Notes
+         Notes
         -----
         The null hypothesis of the test is that there is no serial correlation.
         The Durbin-Watson test statistics is defined as:
@@ -666,7 +667,10 @@ class SSA_Tasker_Env(gym.Env):
         always be between 0 and 4. The closer to 0 the statistic, the more
         evidence for positive serial correlation. The closer to 4, the more
         evidence for negative serial correlation.
+
+        :return: autocorrelation test - Durbin-Watson Statistic for Innovation
         """
+
         innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
         innovations = []
         indexes = [np.where(self.actions[:] == i) for i in range(0, self.m)]
@@ -675,9 +679,11 @@ class SSA_Tasker_Env(gym.Env):
             for i in index:
                 ys.append(self.y[i, self.actions[i]])
             innovations.append(np.copy(np.array(ys)))
+        # Durbin-Watson statistic for all obs
         diff_innovation = np.diff(innovation, 1, axis=0)
         dw_innovation = np.round(np.sum(diff_innovation ** 2, axis=0) / np.sum(innovation ** 2, axis=0), 3)
         dw_innovations = []
+        # Durbin-Watson statistic for min-max per obj
         for inn in innovations:
             diff_inn = np.diff(inn[0], 1, axis=0)
             dw_innovations.append(np.sum(diff_inn ** 2, axis=0) / np.sum(inn[0] ** 2, axis=0))
@@ -693,3 +699,4 @@ class SSA_Tasker_Env(gym.Env):
                                                'Durbin-Watson Statistic for Max per Obj'])
         dw_autocorr_test.name = 'Durbin-Watson Statistic for Innovation'
         return dw_autocorr_test
+

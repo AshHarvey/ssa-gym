@@ -6,10 +6,13 @@ Original repository author : Maj. Ashton Harvey, Devayani Pawar
 
 The repository includes:
 * [Data Source and Transformation functions](envs/transformations.py)
-* [Source code of SSA tasker](envs/ssa_tasker_simple_2.py)
+* [Source code of SSA tasker and Plot results](envs/ssa_tasker_simple_2.py)
+* [Implementation of dynamic functions](envs/dynamics.py)
+* [Implementation of reward function](envs/reward.py)
+* [Implementation of heuristic agents](envs/agents.py)
 * [filter.py](envs/filter.py) is an extract of Roger Labbe's FilterPy (https://filterpy.readthedocs.io/) 
 * [Test Cases](tests.py)
-* [Results and Plots](envs/results.py)
+* [Implementation of Result & plot functions](envs/results.py)
 
 ## Requirements
 Python 3.6, and other common packages listed in `requirements.txt`.
@@ -31,10 +34,10 @@ Python 3.6, and other common packages listed in `requirements.txt`.
 
 
 #### Key Concepts used:
-- Deep Reinforcement Learning : https://spinningup.openai.com/en/latest/
-- Orbital Dynamics: 
-- Kalman Filter for uncertain information: 
-  - Unscented Kalman Filter
+- [Deep Reinforcement Learning](https://spinningup.openai.com/en/latest/)
+- Orbital Dynamics
+- [Kalman Filter for uncertain information](https://www.bzarg.com/p/how-a-kalman-filter-works-in-pictures/)
+  - [Unscented Kalman Filter](https://towardsdatascience.com/the-unscented-kalman-filter-anything-ekf-can-do-i-can-do-it-better-ce7c773cf88d)
 
 #### Libraries used
 - Reinforcement Learning in python: https://gym.openai.com/docs/

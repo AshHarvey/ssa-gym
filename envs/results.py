@@ -7,17 +7,18 @@ from scipy.special import erf
 from scipy import stats
 from envs.transformations import ecef2lla
 import os
-os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
+os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
+#os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
 from mpl_toolkits.basemap import Basemap
 
 
 @njit
 def errors(states, filters_x, filters_diag_P):
     """
-    :param states:
-    :param filters_x:
+    :param states: true states
+    :param filters_x: mean observations
     :param filters_diag_P:
-    :return:
+    :return: magnitude of position - velocity uncertainty & delta(mean- true) position and velocity
     """
     n, m, d = states.shape  # Time steps dimension, RSO dimension, dimension of x
     sigma_position = np.zeros(shape=(n, m))  # magnitude of position uncertainty (meters)
@@ -34,6 +35,11 @@ def errors(states, filters_x, filters_diag_P):
 
 @njit
 def error(states, obs):
+    """
+    :param states: true states
+    :param obs: mean observations
+    :return: magnitude of position - velocity uncertainty & delta(mean- true) position and velocity
+    """
     delta_position = dist3d(obs[:, :3], states[:, :3])  # mean position - true position (meters)
     delta_velocity = dist3d(obs[:, 3:6], states[:, 3:])  # mean velocity - true velocity (meters)
     sigma_position = var3d(obs[:, 6:9])  # magnitude of position uncertainty (meters)
