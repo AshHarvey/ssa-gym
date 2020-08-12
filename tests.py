@@ -431,27 +431,22 @@ import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
-from agents import agent_naive_random, agent_naive_greedy
-from envs.transformations import arcsec2rad
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_xyz as hx, mean_z_uvw as mean_z, mean_xyz, robust_cholesky
+from agents import agent_visible_random
 
-P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-R = np.diag((500**2, 500**2, 500**2))
+config = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': -90,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'xyz',  'z_sigma': tuple([5e2]*3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag([5e2**2]*3), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_xyz, 'residual_z': np.subtract, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
-x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (500, 500, 500) # (1, 1, 1000)
 
-kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
-
-env = gym.make('ssa_tasker_simple-v2', **kwargs)
-env.seed(0)
+env = gym.make('ssa_tasker_simple-v2', **{'config': config})
+env.seed(1)
 obs = env.reset()
-agent = agent_naive_random
+agent = agent_visible_random
 
 done = False
 for i in tqdm(range(env.n)):
@@ -462,7 +457,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 14 fitness tests: 20 objects, no viz limits, xyz measurements')
-print(env.fitness_test)
+print(env.fitness_test())
 
 print("Test 15: Plots...")
 env.plot_sigma_delta(save_path=None)
@@ -478,29 +473,22 @@ env.plot_NIS(save_path=None)
 
 
 # !------------ Test 16 - simple env v2 - 5 objects, 15 degree viz limits, xyz measurements
-
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_xyz as hx, mean_z_uvw as mean_z, mean_xyz, robust_cholesky
 from agents import agent_visible_random
-from envs.transformations import arcsec2rad
 
-P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-R = np.diag((500**2, 500**2, 500**2))
+config = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': 15,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'xyz',  'z_sigma': tuple([5e2]*3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag([5e2**2]*3), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_xyz, 'residual_z': np.subtract, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
-x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (500, 500, 500) # (1, 1, 1000)
-
-kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.0001, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'xyz',
-          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_xyz, 'mean_z': mean_xyz, 'residual_z': np.subtract}
-
-env = gym.make('ssa_tasker_simple-v2', **kwargs)
+env = gym.make('ssa_tasker_simple-v2', **{'config': config})
 env.seed(1)
 obs = env.reset()
 agent = agent_visible_random
@@ -517,29 +505,22 @@ print('Test 16 fitness tests: 20 objects, 15 degree viz limits, xyz measurements
 print(env.fitness_test())
 
 # !------------ Test 17 - simple env v2 - 5 objects, no viz limits, aer measurements
-
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_xyz, mean_z_uvw, mean_xyz
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
 from agents import agent_visible_random
-from envs.transformations import arcsec2rad
 
-P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
+config = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': -90,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'aer',  'z_sigma': (1, 1, 1e3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag(([arcsec2rad**2]*2 + [1e3**2])), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_z, 'residual_z': residual_z, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
-x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (1, 1, 1000) # (1, 1, 1000)
-
-kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': -90, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
-          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
-
-env = gym.make('ssa_tasker_simple-v2', **kwargs)
+env = gym.make('ssa_tasker_simple-v2', **{'config': config})
 env.seed(1)
 obs = env.reset()
 agent = agent_visible_random
@@ -556,29 +537,22 @@ print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
 print(env.fitness_test())
 
 # !------------ Test 18 - simple env v2 - 5 objects, 15 degree viz limits, aer measurements
-
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, mean_xyz, residual_z_aer
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
 from agents import agent_visible_random
-from envs.transformations import arcsec2rad
 
-P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
+config = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': 15,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'aer',  'z_sigma': (1, 1, 1e3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag(([arcsec2rad**2]*2 + [1e3**2])), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_z, 'residual_z': residual_z, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
-x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (1, 1, 1000) # (1, 1, 1000)
-
-kwargs = {'steps': 480, 'rso_count': 5, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
-          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
-
-env = gym.make('ssa_tasker_simple-v2', **kwargs)
+env = gym.make('ssa_tasker_simple-v2', **{'config': config})
 env.seed(1)
 obs = env.reset()
 agent = agent_visible_random
@@ -587,6 +561,7 @@ done = False
 for i in tqdm(range(env.n)):
     if not done:
         action = agent(obs, env)
+
         obs, reward, done, _ = env.step(action)
 
 print('Test 18 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
@@ -594,29 +569,22 @@ print('Test 18 fitness tests: 5 objects, 15 degree viz limits, aer measurements'
 print(env.fitness_test())
 
 # !------------ Test 19 - simple env v2 - 20 objects, 15 degree viz limits, aer measurements
-
 import gym
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-from envs.dynamics import fx_xyz_farnocchia, hx_aer_erfa, mean_z_uvw, mean_xyz, residual_z_aer
+from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
 from agents import agent_visible_greedy
-from envs.transformations import arcsec2rad
 
-P_0 = np.diag((100000**2, 100000**2, 100000**2, 100**2, 100**2, 100**2))
+sample_orbits = np.load('/home/ash/PycharmProjects/ssa-gym/envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy')
 
-R = np.diag((1*arcsec2rad**2, 1*arcsec2rad**2, 1100**2))
+config = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0), 'obs_limit': 15,
+          'observer': (38.828198, -77.305352, 20.0), 'update_interval': 1, 'obs_type': 'aer',  'z_sigma': (1, 1, 1e3),
+          'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025, 'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)),
+          'R': np.diag(([arcsec2rad**2]*2 + [1e3**2])), 'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx,
+          'mean_z': mean_z, 'residual_z': residual_z, 'msqrt': robust_cholesky, 'orbits': sample_orbits}
 
-x_sigma = (100000, 100000, 100000, 100, 100, 100) # (1000, 1000, 1000, 10, 10, 10)
-z_sigma = (1, 1, 1000) # (1, 1, 1000)
-
-kwargs = {'steps': 480, 'rso_count': 20, 'time_step': 30., 't_0': datetime(2020, 5, 4, 0, 0, 0),
-          'obs_limit': 15, 'observer': (38.828198, -77.305352, 20.0), 'x_sigma': x_sigma, 'z_sigma': z_sigma,
-          'q_sigma': 0.000025, 'P_0': P_0, 'R': R, 'update_interval': 1, 'obs_type': 'aer',
-          'orbits': np.load(r'envs/1.5_hour_viz_20000_of_20000_sample_orbits_seed_0.npy'), 'fx': fx_xyz_farnocchia,
-          'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'hx': hx_aer_erfa, 'mean_z': mean_z_uvw, 'residual_z': residual_z_aer}
-
-env = gym.make('ssa_tasker_simple-v2', **kwargs)
+env = gym.make('ssa_tasker_simple-v2', **{'config': config})
 env.seed(0)
 obs = env.reset()
 agent = agent_visible_greedy
