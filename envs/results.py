@@ -195,7 +195,7 @@ def plot_rewards(rewards, dt, t_0, style=None, yscale='symlog'):
     plt.show()
 
 
-def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
+def plot_performance(rewards, dt, t_0, names=None, sigma=1.5, style=None, yscale='linear'):
     o, m, n = rewards.shape  # n: time steps, m: episodes, o: agents
     t = [t_0 + timedelta(seconds=dt * i) for i in range(n)]
 
@@ -211,7 +211,7 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     tim_lim = (t_0.toordinal(), t_0.toordinal() + n / (24 * 60 * 60 / dt))
 
     for k in range(o):
-        plt.fill_between(x=t, y1=performance[0, k, :], y2=performance[2, k, :], alpha=0.25)
+        plt.fill_between(x=t, y1=performance[0, k, :], y2=performance[2, k, :], alpha=0.25, label=names[k])
         plt.plot(t, performance[1, k, :], linewidth=1)
 
     plt.yscale(yscale)
@@ -220,6 +220,7 @@ def plot_performance(rewards, dt, t_0, sigma=1.5, style=None, yscale='linear'):
     plt.xlim(tim_lim)
     plt.title('Performance of Agents over Time')
     plt.grid(True)
+    plt.legend()
 
     plt.show()
 
