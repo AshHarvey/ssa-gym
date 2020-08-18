@@ -22,8 +22,58 @@ env_config = {'steps': 480, 'rso_count': 10, 'time_step': 30., 't_0': datetime(2
           'mean_z': mean_z, 'residual_z': residual_z, 'msqrt': robust_cholesky, 'orbits': sample_orbits, }
 
 from ray import tune
-from ray.rllib.agents.ppo import PPOTrainer
-from ray.rllib.examples.env.simple_corridor import SimpleCorridor
-# env_config = {"corridor_length": 5,}
-# tune.run(PPOTrainer, config={"env": SimpleCorridor, "env_config": env_config})
-tune.run(PPOTrainer, config={"env": SSA_Tasker_Env, "env_config": env_config})
+from ray.rllib.agents.dqn.dqn import DQNTrainer, DEFAULT_CONFIG as DQN_CONFIG
+from ray.rllib.agents.dqn.apex import apex_execution_plan
+from ray.rllib.utils import merge_dicts
+
+import ray
+from ray.rllib.agents.dqn.dqn import DEFAULT_CONFIG, DQNTrainer
+from ray.tune.logger import pretty_print
+from copy import copy
+
+if ray.is_initialized() is False:
+    ray.init()
+config = DEFAULT_CONFIG
+config["optimizer"] = merge_dicts(DQN_CONFIG["optimizer"], {"max_weight_sync_delay": 400,
+                                                            "num_replay_buffer_shards": 4,
+                                                            "debug": False})
+config["num_workers"] = 18
+config["num_gpus"] = 2
+config["n_step"] = 3
+config["buffer_size"] = 2000000
+config["n_step"] = 3
+config["learning_starts"] = 50000
+config["train_batch_size"] = 512
+config["timesteps_per_iteration"] = 25000
+config["target_network_update_freq"] = 500000
+config["exploration_config"] = {"type": "PerWorkerEpsilonGreedy"}
+config["worker_side_prioritization"] = True
+# config["min_iter_time_s"] = 30
+# config["training_intensity"] = None
+# config["log_level"] = 'DEBUG'
+config["env_config"] = env_config
+trainer = DQNTrainer(config=config,
+                     env=SSA_Tasker_Env)
+# Can optionally call trainer.restore(path) to load a checkpoint.
+
+checkpoints = []
+result = {'timesteps_total': 0}
+i = 0
+while result['timesteps_total'] < 1e7:
+    # Perform one iteration of training the policy with PPO
+    result = trainer.train()
+    print(pretty_print(result))
+
+    if result['training_iteration'] % 4 == 0:
+        checkpoint = trainer.save()
+        print("checkpoint saved at", checkpoint)
+        checkpoints.append(copy(checkpoint))
+
+# path = '/home/ash/ray_results/DQN_SSA_Tasker_Env_2020-08-13_13-26-22s_wgpxq5/checkpoint_1/'
+# trainer.restore(path)
+
+# trainer.import_model("my_weights.h5")
+
+'''
+ray.shutdown()
+'''
