@@ -6,7 +6,7 @@ from filterpy.kalman.UKF import UnscentedKalmanFilter as UKF
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
 from poliastro.bodies import Earth
 from poliastro.core.elements import rv2coe
-from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_a, get_eops, ecef2aer, ecef2lla
+from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_a,gcrs2irts_matrix_b, get_eops, ecef2aer, ecef2lla
 from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z
 from envs.dynamics import robust_cholesky
 from envs.results import observations as obs_fn, error, error_failed, plot_delta_sigma, plot_rewards, plot_nees
@@ -38,6 +38,19 @@ unitless: u
 """
 
 class SSA_Tasker_Env(gym.Env):
+    """
+    The main OpenAI Gym class. It encapsulates an environment with
+    arbitrary behind-the-scenes dynamics. An environment can be
+    partially or fully observed.
+    The main API methods that users of this class need to know are:
+        step
+        reset
+        seed
+    And set the following attributes:
+        action_space: The Space object corresponding to valid actions
+        observation_space: The Space object corresponding to valid observations
+        reward_range: A tuple corresponding to the min and max possible rewards
+    """
     # metadata = {'render.modes': ['human']}
     def __init__(self, config=env_config):
         # super(SSA_Tasker_Env, self).__init__()
@@ -99,7 +112,7 @@ class SSA_Tasker_Env(gym.Env):
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
         self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
+        self.trans_matrix = gcrs2irts_matrix_b(self.time, self.eops)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation
@@ -140,6 +153,11 @@ class SSA_Tasker_Env(gym.Env):
         return [seed]
 
     def reset(self):
+        """
+        Resets the state of the environment and returns an initial observation.
+        :return:  observation (object): the initial observation of the
+            space.
+        """
         s = time.time()
         """reset filter"""
         # Clear history
@@ -179,10 +197,17 @@ class SSA_Tasker_Env(gym.Env):
         return self.obs[0]
 
     def step(self, a):
-        """
-        Desc : Default function for step in gym environment
-        :param a: Agent
-        :return: observations, reward, and done
+
+        """Run one timestep of the environment's dynamics. When end of
+        episode is reached, you are responsible for calling `reset()`
+        to reset this environment's state.
+        Accepts an action and returns a tuple (observation, reward, done, info).
+        :param a:
+            action (object): an action provided by the environment
+        :return:
+            observation (object): agent's observation of the current environment
+            reward (float) : amount of reward returned after previous action
+            done (boolean): whether the episode has ended, in which case further step() calls will return undefined results
         """
         step_s = time.time()
         s = time.time()
@@ -304,9 +329,12 @@ class SSA_Tasker_Env(gym.Env):
 
     @property
     def anees(self):
+        """
+        Desc:  based on 3.1 in https://pdfs.semanticscholar.org/1c1f/6c864789630d8cd37d5342f67ad8d480f077.pdf
+        :return: the average normalized estimation error squared (ANEES)
+        """
         s = time.time()
-        # returns the average normalized estimation error squared (ANEES)
-        # based on 3.1 in https://pdfs.semanticscholar.org/1c1f/6c864789630d8cd37d5342f67ad8d480f077.pdf
+
         delta = self.x_true - self.x_filter
         for i in range(self.n):
             for j in range(self.m):
@@ -325,8 +353,17 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['failed_filters'] += e - s
 
+
+########################################################################################################################
+#    Plots derived from results.py
+########################################################################################################################
+
     def plot_sigma_delta(self, style=None, yscale='log', objects=np.array([]), ylim='max', title='default',
                          save_path='default', display=True):
+        """
+        :param objects: For displaying specific objects
+        :return: plot using result.sigma_delta_plot function
+        """
         s = time.time()
         if title == 'default':
             title = 'Filter performance for ' + str(self.m) + ' RSOs, seed = ' + str(self.init_seed)

@@ -52,6 +52,8 @@ https://docs.poliastro.space/en/stable/about.html
 
 ## References:
 
+
+
 ## Citation
 ```
 @misc{ssa-gym_2020,

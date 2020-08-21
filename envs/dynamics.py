@@ -400,6 +400,7 @@ def init_state_vec(orbits='Default', random_state=np.random.RandomState()):
 
 
 def robust_cholesky(a):
+    " Cholesky function for Semi positive definite matrix "
     try:
         return cholesky(a)
     except:

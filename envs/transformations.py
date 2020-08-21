@@ -94,6 +94,31 @@ def utc2cel06a_parameters(t, eop, iau55=False):
 
     return jd, ttb, utb, xp, dx06, yp, dy06
 
+def eraRZ(psi,array):
+    """
+   Desc: Rotate an r-matrix about the z-axis.
+    :param psi: double angle (radians)
+    :param array: double[3][3] r-matrix
+    :return:  rotated array-matrix double[3][3]
+    """
+    s = np.sin(psi)
+    c = np.cos(psi)
+    a00 = c * array[0][0] + s * array[1][0]
+    a01 = c * array[0][1] + s * array[1][1]
+    a02 = c * array[0][2] + s * array[1][2]
+    a10 = s * array[0][0] + c * array[1][0]
+    a11 = s * array[0][1] + c * array[1][1]
+    a12 = s * array[0][2] + c * array[1][2]
+
+    array[0][0] = a00
+    array[0][1] = a01
+    array[0][2] = a02
+    array[1][0] = a10
+    array[1][1] = a11
+    array[1][2] = a12
+
+    return array
+
 def gcrs2irts_matrix_a(t, eop):
     """
     Purpose:
@@ -179,7 +204,7 @@ def gcrs2irts_matrix_b(t, eop):
 
         # Form celestial-terrestrial matrix (no polar motion yet). */
         rc2ti = erfa.cr(rc2i)
-        rc2ti = erfa.rz(era, rc2ti)
+        rc2ti = eraRZ(era, rc2ti)
 
         # Polar motion matrix (TIRS->ITRS, IERS 2003). */
         xp = (eop["x"][date] * (1 - day_frac) + eop["x"][date + 1] * day_frac) * DAS2R
