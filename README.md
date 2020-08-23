@@ -44,13 +44,15 @@ Python 3.6, and other common packages listed in `requirements.txt`.
 - FilterPy - Python library that implements a number of Bayesian filters, most notably Kalman filters: https://filterpy.readthedocs.io/en/latest/
 - Numba - An open source JIT compiler that translates a subset of Python and NumPy code into fast machine code: http://numba.pydata.org/
 - Astropy - A Community Python Library for Astronomy: https://www.astropy.org/
+- ERFA (Essential Routines for Fundamental Astronomy) is a C library containing key algorithms for astronomy, and is based on the SOFA library published by the International Astronomical Union (IAU) https://github.com/liberfa/erfa
 - Poliastro - An open source collection of Python subroutines for solving problems in Astrodynamics and Orbital Mechanics: 
 https://docs.poliastro.space/en/stable/about.html 
-
+- RLlib - RLlib is an open-source library for reinforcement learning that offers both high scalability and a unified API for a variety of applications : https://docs.ray.io/en/master/rllib.html
+     - *Bonus* - RLlib is a library built on top of Ray core: https://docs.ray.io/en/master/ray-overview/index.html
+    
 
 ## Viz
 
-## References:
 
 
 
