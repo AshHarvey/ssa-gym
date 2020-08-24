@@ -24,4 +24,4 @@ env_config = {'steps': 480, 'rso_count': 10, 'time_step': 30., 't_0': datetime(2
               'z_sigma': (1, 1, 1e3), 'x_sigma': tuple([1e5]*3+[1e2]*3), 'q_sigma': 0.000025,
               'P_0': np.diag(([1e5**2]*3 + [1e2**2]*3)), 'R': np.diag(([arcsec2rad**2]*2 + [1e3**2])),
               'alpha': 0.0001, 'beta': 2., 'kappa': 3-6, 'fx': fx, 'hx': hx, 'mean_z': mean_z, 'residual_z': residual_z,
-              'msqrt': robust_cholesky, 'orbits': sample_orbits, }
+              'msqrt': robust_cholesky, 'orbits': sample_orbits, 'flat': False}

@@ -51,7 +51,7 @@ class SSA_Tasker_Env(gym.Env):
         observation_space: The Space object corresponding to valid observations
         reward_range: A tuple corresponding to the min and max possible rewards
     """
-    # metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['human']}
     def __init__(self, config=env_config):
         # super(SSA_Tasker_Env, self).__init__()
         s = time.time()
@@ -66,6 +66,7 @@ class SSA_Tasker_Env(gym.Env):
         self.n = config['steps']                # max run steps
         self.m = config['rso_count']            # number of Resident Space Object (RSO) to include in the simulation
         self.obs_limit = np.radians(config['obs_limit'])  # don't observe objects below this elevation [rad]
+        self.flat = config['flat']
 
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
@@ -138,8 +139,14 @@ class SSA_Tasker_Env(gym.Env):
         self.sigmas_h = np.empty((self.n, x_dim * 2 + 1, z_dim))  # used to store sigmas points used in updates
         """Define Gym spaces"""
         self.action_space = gym.spaces.Discrete(self.m)  # the action is choosing which RSO to look at
-        self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m, 12)), high=np.tile(np.inf, (self.m, 12)),
-                                                dtype=np.float64)  # the obs is x [6] and diag(P) [6] for each RSO [m]
+        if self.flat == True:
+            self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m * 12)), # flat 1d array for MLP
+                                                    high=np.tile(np.inf, (self.m * 12)),
+                                                    dtype=np.float64)  # obs is x [6] and diag(P) [6] for each RSO [m]
+        else:
+            self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m, 12)), # 2d array for readability
+                                                    high=np.tile(np.inf, (self.m, 12)),
+                                                    dtype=np.float64)  # obs is x [6] and diag(P) [6] for each RSO [m]
         """Initial reset and seed calls"""
         self.np_random = None
         self.init_seed = self.seed()
@@ -194,7 +201,10 @@ class SSA_Tasker_Env(gym.Env):
         self.i = 0  # sets initial time step
         e = time.time()
         self.runtime['reset'] += e - s
-        return self.obs[0]
+        if self.flat == True:
+            return self.obs[0].flatten()
+        else:
+            return self.obs[0]
 
     def step(self, a):
 
@@ -282,7 +292,10 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['Observations and Reward'] += e - s
         step_e = time.time()
         self.runtime['step'] += step_e - step_s
-        return self.obs[self.i], self.rewards[self.i], done, {}  # observations, reward, and done
+        if self.flat == True:
+            return self.obs[self.i].flatten(), self.rewards[self.i], done, {}  # observations, reward, and done
+        else:
+            return self.obs[self.i], self.rewards[self.i], done, {}  # observations, reward, and done
 
     def filter_error(self, object_id, activity, error_type):
         s = time.time()
@@ -729,3 +742,10 @@ class SSA_Tasker_Env(gym.Env):
         dw_autocorr_test.name = 'Durbin-Watson Statistic for Innovation'
         return dw_autocorr_test
 
+'''    def render(self, mode='human', close=False):
+        # Render the environment to the screen, detailed rendering not yet implemented.
+        map_plot([self.x_filter[self.i]], [self.x_filter[self.i]], [self.trans_matrix[self.i]], self.obs_lla)
+        time.sleep(1)
+        
+    def close(self):
+        plt.close()'''
