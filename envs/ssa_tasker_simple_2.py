@@ -59,14 +59,15 @@ class SSA_Tasker_Env(gym.Env):
                         'perform predictions': 0, 'update with observation': 0, 'Observations and Reward': 0,
                         'filter_error': 0, 'visible_objects': 0, 'object_visibility': 0, 'anees': 0,
                         'failed_filters': 0, 'plot_sigma_delta': 0, 'plot_rewards': 0, 'plot_anees': 0,
-                        'plot_actions': 0, 'all_true_obs': 0, 'plot_visibility': 0}
+                        'plot_actions': 0, 'all_true_obs': 0, 'plot_visibility': 0, 'predict method': 0}
         """Simulation configuration"""
         self.t_0 = config['t_0']                # time at start of simulation
         self.dt = config['time_step']           # length of time steps [s]
         self.n = config['steps']                # max run steps
         self.m = config['rso_count']            # number of Resident Space Object (RSO) to include in the simulation
         self.obs_limit = np.radians(config['obs_limit'])  # don't observe objects below this elevation [rad]
-        self.flat = config['flat']
+        self.obs_returned = config['obs_returned']
+        self.reward_type = config['reward_type']
 
         # configuration parameters for RSOs; sma: Semi-major axis [m], ecc: Eccentricity [u], inc: Inclination (rad),
         # raan: Right ascension of the ascending node (rad), argp: Argument of perigee (rad), nu: True anomaly (rad)
@@ -139,10 +140,15 @@ class SSA_Tasker_Env(gym.Env):
         self.sigmas_h = np.empty((self.n, x_dim * 2 + 1, z_dim))  # used to store sigmas points used in updates
         """Define Gym spaces"""
         self.action_space = gym.spaces.Discrete(self.m)  # the action is choosing which RSO to look at
-        if self.flat == True:
+        if self.obs_returned == 'flatten':
             self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m * 12)), # flat 1d array for MLP
                                                     high=np.tile(np.inf, (self.m * 12)),
                                                     dtype=np.float64)  # obs is x [6] and diag(P) [6] for each RSO [m]
+        elif self.obs_returned == 'aer':
+            self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m * 4)), # flat 1d array for MLP
+                                                    high=np.tile(np.inf, (self.m * 4)),
+                                                    dtype=np.float64)  # obs is aer [3] and trace(P) [1] for each RSO [m]
+            self.observation = np.zeros(self.m * 4)
         else:
             self.observation_space = gym.spaces.Box(low=np.tile(-np.inf, (self.m, 12)), # 2d array for readability
                                                     high=np.tile(np.inf, (self.m, 12)),
@@ -153,6 +159,7 @@ class SSA_Tasker_Env(gym.Env):
         self.reset()
         e = time.time()
         self.runtime['__init__'] += e - s
+        #self.seed(0)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -201,8 +208,11 @@ class SSA_Tasker_Env(gym.Env):
         self.i = 0  # sets initial time step
         e = time.time()
         self.runtime['reset'] += e - s
-        if self.flat == True:
+        if self.obs_returned == 'flatten':
             return self.obs[0].flatten()
+        elif self.obs_returned == 'aer':
+            self.observation = self.aer_obs(np.zeros(self.m * 4))
+            return self.observation
         else:
             return self.obs[0]
 
@@ -237,7 +247,10 @@ class SSA_Tasker_Env(gym.Env):
         for j in range(self.m):
             if not (j in self.failed_filters_id):
                 try:
+                    s2 = time.time()
                     self.filters[j].predict()
+                    e2 = time.time()
+                    self.runtime['predict method'] += e2 - s2
                     if np.any(np.isnan(self.filters[j].x)):
                         self.filter_error(object_id=j, activity='predict', error_type=', predict returned nan. ')
                 except ValueError:
@@ -283,19 +296,51 @@ class SSA_Tasker_Env(gym.Env):
         self.obs[self.i] = obs_fn(self.x_filter[self.i], self.P_filter[self.i])
         tmp = error(self.x_true[self.i], self.obs[self.i])
         self.delta_pos[self.i], self.delta_vel[self.i], self.sigma_pos[self.i], self.sigma_vel[self.i] = tmp
-        self.rewards[self.i] = reward_proportional_trinary_true(self.delta_pos[self.i])
         done = False
+        if self.reward_type == 'jones':
+            if np.max(self.delta_pos[self.i]) > 5e6:
+                done = True
+                self.rewards[self.i] = 0
+            elif np.max(self.delta_pos[self.i]) < 3e4:
+                done = True
+                self.rewards[self.i] = 1
+            elif self.i + 1 >= self.n:
+                done = True
+                self.rewards[self.i] = 0
+            else:
+                done = False
+                self.rewards[self.i] = 0
+        elif self.reward_type == 'trinary':
+            self.rewards[self.i] = reward_proportional_trinary_true(self.delta_pos[self.i]) # /480 # reward scaling for DRL
+        elif self.reward_type == 'shaped':
+            if np.max(self.delta_pos[self.i]) > 5e6:
+                done = True
+                self.rewards[self.i] = 0
+            elif np.max(self.delta_pos[self.i]) < 3e4:
+                done = True
+                self.rewards[self.i] = 1 - np.sum(self.rewards[:self.i])
+            elif a == np.argmax(self.sigma_pos[self.i-1]):
+                self.rewards[self.i] = 1/self.n
+            elif not a == np.argmax(self.sigma_pos[self.i-1]):
+                self.rewards[self.i] = -1/self.n
+            else:
+                self.rewards[self.i] = 0
+
         if self.i + 1 >= self.n:
             done = True
+
         e = time.time()
 
         self.runtime['Observations and Reward'] += e - s
         step_e = time.time()
         self.runtime['step'] += step_e - step_s
-        if self.flat == True:
+        if self.obs_returned == 'flatten':
             return self.obs[self.i].flatten(), self.rewards[self.i], done, {}  # observations, reward, and done
+        elif self.obs_returned == 'aer':
+            self.observation = self.aer_obs(self.observation)
+            return self.observation, np.nan_to_num(self.rewards[self.i], copy=False, nan=0.5, posinf=0.5, neginf=0.5), done, {}  # observations, reward, and done
         else:
-            return self.obs[self.i], self.rewards[self.i], done, {}  # observations, reward, and done
+            return self.obs[self.i], np.nan_to_num(self.rewards[self.i], copy=False, nan=0.5, posinf=0.5, neginf=0.5), done, {}  # observations, reward, and done
 
     def filter_error(self, object_id, activity, error_type):
         s = time.time()
@@ -312,7 +357,6 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['filter_error'] += e - s
 
-    @property
     def visible_objects(self):
         s = time.time()
         RSO_ID = [j for j in range(self.m)]
@@ -330,7 +374,6 @@ class SSA_Tasker_Env(gym.Env):
         viz_bool = el >= self.obs_limit
         return viz_bool
 
-    @property
     def object_visibility(self):
         s = time.time()
         x_itrs = np.array([self.trans_matrix[self.i] @ self.x_true[self.i, j, :3] for j in range(self.m)])
@@ -340,7 +383,6 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['object_visibility'] += e - s
         return viz
 
-    @property
     def anees(self):
         """
         Desc:  based on 3.1 in https://pdfs.semanticscholar.org/1c1f/6c864789630d8cd37d5342f67ad8d480f077.pdf
@@ -423,7 +465,6 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['plot_actions'] += e - s
 
-    @property
     def z_true_all(self):
         s = time.time()
         z = []
@@ -436,7 +477,6 @@ class SSA_Tasker_Env(gym.Env):
         self.runtime['all_true_obs'] += e - s
         return z
 
-    @property
     def aer_true_all(self):
         s = time.time()
         aer = []
@@ -451,7 +491,7 @@ class SSA_Tasker_Env(gym.Env):
 
     def plot_visibility(self, save_path=None, display=True):
         s = time.time()
-        visibility = self.aer_true_all[:, :, 1].T > self.obs_limit
+        visibility = self.aer_true_all()[:, :, 1].T > self.obs_limit
         xlabel = 'Time Step (' + str(self.dt) + ' seconds per)'
         title = 'Visibility Plot (white = visible); elevation > ' + str(
             np.round(np.degrees(self.obs_limit), 0)) + ' degrees'
@@ -553,7 +593,6 @@ class SSA_Tasker_Env(gym.Env):
             x_true = self.x_true[timesteps[0]:timesteps[1], objects[:]]
         map_plot(x_filter, x_true, self.trans_matrix, self.obs_lla)
 
-    @property
     def innovation(self):
         innovation = np.array([self.y[i, self.actions[i]] for i in range(1, self.n)])
         RSO_ID = np.arange(0, self.m)
@@ -565,9 +604,8 @@ class SSA_Tasker_Env(gym.Env):
             np.put(innovation[:, i], np.where((self.obs_taken[1:]) == False), np.nan)
         return innovation, innovations
 
-    @property
     def autocorrelation(self):
-        innovation, innovations = self.innovation
+        innovation, innovations = self.innovation()
         autocorrelation = []
         for i in range(0, 3):
             autocorrelation.append(acf(x=innovation[:, i], missing='conservative', fft=False))
@@ -581,7 +619,7 @@ class SSA_Tasker_Env(gym.Env):
         return autocorrelation, autocorrelations
 
     def plot_autocorrelation(self, RSO_ID=None, save_path=None, display=True):
-        autocorrelation, autocorrelations = self.autocorrelation
+        autocorrelation, autocorrelations = self.autocorrelation()
         if RSO_ID is None:
             RSO_ID = np.arange(0, self.m)
         autocorrelations = [autocorrelations[j] for j in RSO_ID]
@@ -619,14 +657,14 @@ class SSA_Tasker_Env(gym.Env):
         Test 3 - Innovation whiteness (autocorrelation) test
         Test 4 - Normalized estimation error squared χ2 test
         """
-        innovation, innovations = self.innovation
+        innovation, innovations = self.innovation()
 
         if self.obs_type == 'xyz':
             clabels = ['x', 'y', 'z']
         elif self.obs_type == 'aer':
             clabels = ['Azimuth', 'Elevation', 'Range']
 
-        autocorr, autocorrs = self.autocorrelation
+        autocorr, autocorrs = self.autocorrelation()
         autocorr_contained = []
         for i in range(autocorr.shape[0]):
             autocorr_contained.append(np.mean(
@@ -689,7 +727,6 @@ class SSA_Tasker_Env(gym.Env):
         Tests = Tests.replace(np.nan, '', regex=True)
         return Tests
 
-    @property
     def innovation_dw_test(self):
         """
         concept source: https://www.statsmodels.org/stable/_modules/statsmodels/stats/stattools.html#durbin_watson
@@ -741,6 +778,15 @@ class SSA_Tasker_Env(gym.Env):
                                                'Durbin-Watson Statistic for Max per Obj'])
         dw_autocorr_test.name = 'Durbin-Watson Statistic for Innovation'
         return dw_autocorr_test
+
+    def aer_obs(self, obs):
+        i = self.i
+        for j in range(self.m):
+            obs[4*j: 4*j + 3] = hx(self.x_filter[i, j, :3], self.trans_matrix[i], self.obs_lla, self.obs_itrs)
+            obs[4*j + 3] = np.trace(self.P_filter[i, j])
+        obs = np.nan_to_num(obs, copy=False, nan=0.001, posinf=0.001, neginf=0.001)
+        return obs
+
 
 '''    def render(self, mode='human', close=False):
         # Render the environment to the screen, detailed rendering not yet implemented.

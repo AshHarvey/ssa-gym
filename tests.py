@@ -444,6 +444,8 @@ env_config['R'] = np.diag([5e2**2]*3)
 env_config['hx'] = hx_xyz
 env_config['mean_z'] = mean_xyz
 env_config['residual_z'] = np.subtract
+env_config['obs_returned'] = '2darray'
+env_config['reward_type'] = 'trinary'
 
 env = gym.make('ssa_tasker_simple-v2', **{'config': env_config})
 env.seed(1)
@@ -459,12 +461,12 @@ for i in tqdm(range(env.n)):
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 14 fitness tests: 20 objects, no viz limits, xyz measurements')
-print(env.fitness_test())
+print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
 
 print("Test 15: Plots...")
 env.plot_sigma_delta(save_path=None)
 env.plot_visibility(save_path=None)
-env.plot_anees(save_path=None)
+env.plot_anees(save_path=None) # TODO: needs fixing
 env.plot_autocorrelation(save_path=None)
 env.plot_map()
 env.plot_actions(save_path=None)
@@ -492,6 +494,8 @@ env_config['R'] = np.diag([5e2**2]*3)
 env_config['hx'] = hx_xyz
 env_config['mean_z'] = mean_xyz
 env_config['residual_z'] = np.subtract
+env_config['obs_returned'] = '2darray'
+env_config['reward_type'] = 'trinary'
 
 env = gym.make('ssa_tasker_simple-v2', **{'config': env_config})
 env.seed(1)
@@ -507,7 +511,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 16 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 16 fitness tests: 20 objects, 15 degree viz limits, xyz measurements')
-print(env.fitness_test())
+print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
 
 # !------------ Test 17 - simple env v2 - 5 objects, no viz limits, aer measurements
 import gym
@@ -515,6 +519,8 @@ import numpy as np
 from tqdm import tqdm
 from agents import agent_visible_random
 from envs import env_config
+env_config['obs_returned'] = '2darray'
+env_config['reward_type'] = 'trinary'
 
 env_config['rso_count'] = 5
 env_config['obs_limit'] = -90
@@ -533,7 +539,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 17 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
-print(env.fitness_test())
+print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
 
 # !------------ Test 18 - simple env v2 - 5 objects, 15 degree viz limits, aer measurements
 import gym
@@ -541,6 +547,8 @@ import numpy as np
 from tqdm import tqdm
 from agents import agent_visible_random
 from envs import env_config
+env_config['obs_returned'] = '2darray'
+env_config['reward_type'] = 'trinary'
 
 env_config['rso_count'] = 5
 
@@ -558,7 +566,8 @@ for i in tqdm(range(env.n)):
 
 print('Test 18 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 18 fitness tests: 5 objects, 15 degree viz limits, aer measurements')
-print(env.fitness_test())
+print(env.fitness_test()) # TODO: RuntimeWarning: Probably from a nan value in nees, may be related to above
+
 
 # !------------ Test 19 - simple env v2 - 20 objects, 15 degree viz limits, aer measurements
 import gym
@@ -566,21 +575,31 @@ import numpy as np
 from tqdm import tqdm
 from datetime import datetime
 from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
-from agents import agent_visible_greedy
+from agents import agent_visible_greedy_aer, agent_visible_random, agent_visible_greedy, agent_visible_greedy_spoiled
 from envs import env_config
 
 env_config['rso_count'] = 20
+env_config['steps'] = 480
+env_config['obs_limit'] = 15
+env_config['reward_type'] = 'trinary'
+env_config['obs_returned'] = 'flatten'
 
 env = gym.make('ssa_tasker_simple-v2', **{'config': env_config})
 env.seed(0)
 obs = env.reset()
-agent = agent_visible_greedy
+agent = agent_visible_greedy # agent_visible_greedy # agent_visible_greedy_aer # agent_visible_greedy_aer # agent_visible_random
 
 done = False
+rewards = []
+ts = 0
 for i in tqdm(range(env.n)):
     if not done:
+        ts += 1
         action = agent(obs, env)
         obs, reward, done, _ = env.step(action)
+        rewards.append(reward)
+
+env.plot_sigma_delta()
 
 print('Test 19 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 19 fitness tests: 20 objects, 15 degree viz limits, aer measurements')
