@@ -7,8 +7,7 @@ The repository includes:
 * [Source code for the Simulation and Plots](envs/ssa_tasker_simple_2.py)
 * [Implementation of Dynamic functions](envs/dynamics.py)
 * [Library of Reward function](envs/reward.py)
-* [Library of Heuristic agents](envs/agents.py)
-* [filter.py](envs/filter.py) is an extract of Roger Labbe's FilterPy (https://filterpy.readthedocs.io/) 
+* [Library of Heuristic agents](agents.py)
 * [Test Cases](tests.py)
 * [Results](envs/results.py)
 
