@@ -1,18 +1,18 @@
-# ssa-gym
+# ssa-gym 
 
 This is a repository of an OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
 
 Original repository author : Maj. Ashton Harvey, Devayani Pawar
 
 The repository includes:
-* [Data Source and Transformation functions](envs/transformations.py)
-* [Source code of SSA tasker and Plot results](envs/ssa_tasker_simple_2.py)
-* [Implementation of dynamic functions](envs/dynamics.py)
-* [Implementation of reward function](envs/reward.py)
-* [Implementation of heuristic agents](envs/agents.py)
+* [Library of Astro-Transformation functions](envs/transformations.py)
+* [Source code for the Simulation and Plots](envs/ssa_tasker_simple_2.py)
+* [Implementation of Dynamic functions](envs/dynamics.py)
+* [Library of Reward function](envs/reward.py)
+* [Library of Heuristic agents](envs/agents.py)
 * [filter.py](envs/filter.py) is an extract of Roger Labbe's FilterPy (https://filterpy.readthedocs.io/) 
 * [Test Cases](tests.py)
-* [Implementation of Result & plot functions](envs/results.py)
+* [Results](envs/results.py)
 
 ## Requirements
 Python 3.6, and other common packages listed in `requirements.txt`.
@@ -23,21 +23,28 @@ Python 3.6, and other common packages listed in `requirements.txt`.
    ```bash
    pip3 install -r requirements.txt
    ```
-3. [optional] Run setup from the repository root directory
-    ```bash
-    python3 setup.py install
-    ``` 
+   
+## Data 
+
+Data is gathered from [International Earth Rotation and Reference System Service](https://www.iers.org/). We are using the
+Earth Orientation data for this research. You can see the format of the dataset [here](https://data.iers.org/products/39/640/orig/eopc04.62-now).
+ 
+
 ## Getting Started:
 
-
-[Register's environment with Gym](envs/__init__.py )
-
+- Setting up the simulation:[Register's environment with Gym](envs/__init__.py )
+- Propagator 
+- Reset and Step function 
+- Reward
+- Action
 
 #### Key Concepts used:
 - [Deep Reinforcement Learning](https://spinningup.openai.com/en/latest/)
 - Orbital Dynamics
 - [Kalman Filter for uncertain information](https://www.bzarg.com/p/how-a-kalman-filter-works-in-pictures/)
-  - [Unscented Kalman Filter](https://towardsdatascience.com/the-unscented-kalman-filter-anything-ekf-can-do-i-can-do-it-better-ce7c773cf88d)
+  - [Unscented Kalman Filter](https://towardsdatascience.com/the-unscented-kalman-filter-anything-ekf-can-do-i-can-do-it-better-ce7c773cf88d): UKF
+is able to provide better estimates given the nonlinearity of the orbital dynamics
+of the satellites.
 
 #### Libraries used
 - Reinforcement Learning in python: https://gym.openai.com/docs/
@@ -51,8 +58,9 @@ https://docs.poliastro.space/en/stable/about.html
      - *Bonus* - RLlib is a library built on top of Ray core: https://docs.ray.io/en/master/ray-overview/index.html
     
 
-## Viz
+## Model
 
+![Dual Image U-Net](Images/flow.png)
 
 
 
@@ -69,5 +77,5 @@ https://docs.poliastro.space/en/stable/about.html
 }
 ```
 
-
+## Acknowledgement
 

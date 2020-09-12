@@ -4,13 +4,12 @@ from numpy.core.umath import cos, sin, sqrt
 from numpy.linalg import norm
 from numba import njit
 
-'''
-This file contains all of the functions necessary to perform replicate the default functionality of PoliAstroy's
-implementation of Farnocchia's mean motion based analytical orbit propagation algorithm. The implementing was writen by
-by Juan Luis Cano Rodríguez. I have modify the structuring of several function or sub-functions to function in a gym 
-environment running inside an RLLib worker. Credit for the development goes to Juan and the PoliAstro team.
-'''
-
+########################################################################################################################
+# This file contains all of the functions necessary to perform replicate the default functionality of PoliAstroy's
+# implementation of Farnocchia's mean motion based analytical orbit propagation algorithm. The implementing was writen by
+# by Juan Luis Cano Rodríguez. I have modify the structuring of several function or sub-functions to function in a gym
+# environment running inside an RLLib worker. Credit for the development goes to Juan and the PoliAstro team.
+########################################################################################################################
 
 @njit
 def rv_pqw(k, p, ecc, nu):

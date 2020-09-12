@@ -21,11 +21,12 @@ RE_eq = Earth.R.to_value(u.m)
 def ad_none(t0, u_, k_):
     return 0, 0, 0
 
+#  The main purpose of poliastro.core.propagation is to propagate a body along its orbit.
+
 ########################################################################################################################
-#  Calculate fx - The main purpose of poliastro.core.propagation is to propagate a body along its orbit.
+#  Calculate fx - state transition function - predict next state based on constant velocity model x = vt + x_0
 ########################################################################################################################
 
-#@jit(['float64[::](float64[::],float64)'],nopython=True)
 @njit
 def fx_xyz_markley(x, dt, k=k):
     """
@@ -200,10 +201,9 @@ def fx_xyz_cowell(x, dt, k=k, rtol=1e-11, *, events=None, ad=ad_none, **ad_kwarg
     return result.sol(tof) # ODE solution for the time instance
 
 ########################################################################################################################
-#  Calculate hx
+#  Calculate hx - measurement function - convert state into a measurement where measurements are [x_pos, y_pos]
 ########################################################################################################################
 
-#@jit(['float64[::](float64[::])'],nopython=True)
 def hx_xyz(x_gcrs, trans_matrix=None, observer_lla=None, observer_itrs=None, time=None):
     """
     desc: measurement function - convert state into a measurement where measurements are [azimuth, elevation]

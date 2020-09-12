@@ -1,8 +1,7 @@
 import numpy as np
-#from stable_baselines import A2C
 
 ########################################################################################################################
-# Heuristics used:
+# Heuristic Agents used:
 ########################################################################################################################
 
 def agent_naive_greedy(obs, env=None):
@@ -13,6 +12,18 @@ def agent_naive_greedy(obs, env=None):
 def agent_naive_random(obs=None, env=None):
     return env.action_space.sample()
 
+def agent_shannon(obs,env):
+    """
+    :param env: environment
+    :return: Shannon Information Gain
+    """
+    visible = env.visible_objects()
+    if not np.any(visible):
+        return env.action_space.sample()
+    with np.errstate(divide='ignore', invalid='ignore'):
+        calculate = [(np.log(np.linalg.det(P) /np.linalg.det(P_i))) for P, P_i in zip(env.P_filter[env.i ][visible], env.P_filter[env.i - 1 ][visible])]
+    visible_id = np.argmax(calculate)
+    return visible[visible_id]
 
 def agent_visible_random(obs, env):
     visible = env.visible_objects()
