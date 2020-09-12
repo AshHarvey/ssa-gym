@@ -60,7 +60,7 @@ https://docs.poliastro.space/en/stable/about.html
 
 ## Model
 
-![Dual Image U-Net](Images/flow.png)
+![Process flow](Images/flow.png)
 
 
 
