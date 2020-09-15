@@ -59,6 +59,11 @@ def error_failed(state, x, P):
 
 @njit
 def observations(filters_x, filters_P):
+    """
+    :param filters_x: means for all objects at each time step
+    :param filters_P: covariance for all objects at each time step
+    :return: observations
+    """
     n = len(filters_x)
     observation = np.zeros((n, 12))
     for i in range(n):
@@ -561,7 +566,7 @@ def map_plot(x_filter, x_true, trans_matrix, observer):
     my_map.drawparallels(np.arange(-90, 90, 30), color='gray')
     for j in range(m):
         x, y = my_map(lon_filter[:, j], lat_filter[:, j])
-        my_map.scatter(x, y, marker='o', zorder=3, label='Predicted Location')
+        my_map.scatter(x, y, marker='o', label='Predicted Location')
         my_map.scatter(lon_true[:, j], lat_true[:, j], marker='x', zorder=3, label='Actual Location')
 
     plt.annotate('Observation Station',

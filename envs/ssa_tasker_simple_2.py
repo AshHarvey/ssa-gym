@@ -22,6 +22,11 @@ import matplotlib as mpl
 from scipy import stats
 from statsmodels.tsa.stattools import acf
 from . import env_config
+import os
+
+os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
+#os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
+from mpl_toolkits.basemap import Basemap
 
 """
 Unit Abbreviations: 
@@ -52,6 +57,7 @@ class SSA_Tasker_Env(gym.Env):
         reward_range: A tuple corresponding to the min and max possible rewards
     """
     metadata = {'render.modes': ['human']}
+
     def __init__(self, config=env_config):
         # super(SSA_Tasker_Env, self).__init__()
         s = time.time()
@@ -77,6 +83,7 @@ class SSA_Tasker_Env(gym.Env):
         self.obs_itrs = lla2ecef(self.obs_lla)      # Observer coordinates in ITRS (m)
         self.update_interval = config['update_interval']  # how often an observation should be taken
         self.i = 0
+
         """Filter configuration"""
         # standard deviation of noise added to observations [rad, rad, m]
         self.obs_type = config['obs_type']
@@ -96,7 +103,9 @@ class SSA_Tasker_Env(gym.Env):
         self.mean_z = config['mean_z']
         self.residual_z = config['residual_z']
         self.msqrt = config['msqrt']
-        self.alpha, self.beta, self.kappa = config['alpha'], config['beta'], config['kappa']  # sigma point configuration parameters
+        self.alpha, self.beta, self.kappa = config['alpha'], config['beta'], config[
+            'kappa']  # sigma point configuration parameters
+
         """Prep arrays"""
         # variables for the filter
         x_dim = int(6)
@@ -109,19 +118,20 @@ class SSA_Tasker_Env(gym.Env):
             self.R = np.diag(self.z_sigma ** 2)  # Noise added to the filter during observation updates
         else:
             self.R = np.copy(config['R'])
-        self.x_true = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
-        self.x_filter = np.empty(shape=(self.n, self.m, x_dim))  # means for all objects at each time step
+        self.x_true = np.empty(shape=(self.n, self.m, x_dim))  # true means for all objects at each time step
+        self.x_filter = np.empty(shape=(self.n, self.m, x_dim))  # filter means for all objects at each time step
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
         self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_b(self.time, self.eops)  # used for celestial to terrestrial
+        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
-        self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the observations which are made
+        self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the true observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation
         self.S = np.empty(shape=(self.n, self.m, z_dim, z_dim))  # array to contain the innovation covariance
         self.x_noise = np.empty(shape=(self.m, x_dim))  # array to contain the noise added to each RSO
         self.filters = []  # creates a list for ukfs
-        # variables for environment performance
+
+        """variables for environment performance"""
         self.delta_pos = np.empty((self.n, self.m))  # euclidean distance between true and filter mean position elements
         self.delta_vel = np.empty((self.n, self.m))  # euclidean distance between true and filter mean velocity elements
         self.sigma_pos = np.empty((self.n, self.m))  # euclidean magnitude of diagonal position elements of covariance
@@ -138,6 +148,7 @@ class SSA_Tasker_Env(gym.Env):
         self.nees = np.empty((self.n, self.m))  # used for normalized estimation error squared (NEES) and its average
         self.visibility = []  # used to store a log of visible objects at each time step
         self.sigmas_h = np.empty((self.n, x_dim * 2 + 1, z_dim))  # used to store sigmas points used in updates
+
         """Define Gym spaces"""
         self.action_space = gym.spaces.Discrete(self.m)  # the action is choosing which RSO to look at
         if self.obs_returned == 'flatten':
@@ -160,6 +171,8 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['__init__'] += e - s
         #self.seed(0)
+
+
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -311,7 +324,7 @@ class SSA_Tasker_Env(gym.Env):
                 done = False
                 self.rewards[self.i] = 0
         elif self.reward_type == 'trinary':
-            self.rewards[self.i] = reward_proportional_trinary_true(self.delta_pos[self.i]) # /480 # reward scaling for DRL
+            self.rewards[self.i] = reward_proportional_trinary_true(self.delta_pos[self.i]) # reward scaling for DRL
         elif self.reward_type == 'shaped':
             if np.max(self.delta_pos[self.i]) > 5e6:
                 done = True
@@ -788,10 +801,3 @@ class SSA_Tasker_Env(gym.Env):
         return obs
 
 
-'''    def render(self, mode='human', close=False):
-        # Render the environment to the screen, detailed rendering not yet implemented.
-        map_plot([self.x_filter[self.i]], [self.x_filter[self.i]], [self.trans_matrix[self.i]], self.obs_lla)
-        time.sleep(1)
-        
-    def close(self):
-        plt.close()'''

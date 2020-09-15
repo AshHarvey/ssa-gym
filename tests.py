@@ -434,7 +434,7 @@ from envs.dynamics import hx_xyz, mean_xyz
 from agents import agent_visible_random
 from envs import env_config
 
-env_config['rso_count'] = 20
+env_config['rso_count'] = 40
 env_config['obs_limit'] = -90
 env_config['obs_type'] = 'xyz'
 env_config['z_sigma'] = tuple([5e2]*3)
@@ -519,6 +519,8 @@ import numpy as np
 from tqdm import tqdm
 from agents import agent_visible_random
 from envs import env_config
+import matplotlib.pyplot as plt
+
 env_config['obs_returned'] = '2darray'
 env_config['reward_type'] = 'trinary'
 
@@ -533,10 +535,12 @@ agent = agent_visible_random
 done = False
 for i in tqdm(range(env.n)):
     if not done:
+        env.render()
+
         action = agent(obs, env)
 
         obs, reward, done, _ = env.step(action)
-
+plt.show()
 print('Test 17 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
 print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
@@ -575,12 +579,12 @@ import numpy as np
 from tqdm import tqdm
 from datetime import datetime
 from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
-from agents import agent_visible_greedy_aer, agent_visible_random, agent_visible_greedy, agent_visible_greedy_spoiled
+from agents import agent_visible_greedy, agent_shannon ,agent_visible_random
 from envs import env_config
 
+env_config['obs_limit'] = - 90
 env_config['rso_count'] = 20
 env_config['steps'] = 480
-env_config['obs_limit'] = 15
 env_config['reward_type'] = 'trinary'
 env_config['obs_returned'] = 'flatten'
 
@@ -595,7 +599,7 @@ ts = 0
 for i in tqdm(range(env.n)):
     if not done:
         ts += 1
-        action = agent(obs, env)
+        action = agent(obs,env)
         obs, reward, done, _ = env.step(action)
         rewards.append(reward)
 
