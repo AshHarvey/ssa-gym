@@ -1,3 +1,5 @@
+![logo](Images/logo.png)
+
 # ssa-gym : an OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
 
 Original repository author : Maj. Ashton Harvey, Devayani Pawar
