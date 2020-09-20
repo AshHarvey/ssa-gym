@@ -6,7 +6,7 @@ Original repository author : Maj. Ashton Harvey, Devayani Pawar
 
 The repository includes:
 * [Library of Astro-Transformation functions](envs/transformations.py)
-* [Source code for the Simulation and Plots](envs/ssa_tasker_simple_2.py)
+* [Source code for the SSA-GYM Simulation](envs/ssa_tasker_simple_2.py)
 * [Implementation of Dynamic functions](envs/dynamics.py)
 * [Library of Reward function](envs/reward.py)
 * [Library of Heuristic agents](agents.py)
@@ -28,12 +28,14 @@ Python 3.6, and other common packages listed in `requirements.txt`.
 Data is gathered from [International Earth Rotation and Reference System Service](https://www.iers.org/). We are using the
 Earth Orientation data for this research. You can see the format of the dataset [here](https://data.iers.org/products/39/640/orig/eopc04.62-now).
  
+## Preparing the Data
 
-## Getting Started:
 
-- Setting up the simulation:[Register's environment with Gym](envs/__init__.py )
-- Propagator 
-- Reset and Step function 
+## Getting Started
+
+- Setting up the simulation: [Register's environment with Gym](envs/__init__.py )
+- Simulate orbits and Propagator: []
+-  
 - Reward
 - Action
 
@@ -61,7 +63,7 @@ https://docs.poliastro.space/en/stable/about.html
 
 ![Process flow](Images/flow.png)
 
-
+## Training the Model
 
 ## Citation
 ```
