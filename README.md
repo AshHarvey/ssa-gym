@@ -1,17 +1,25 @@
 ![logo](Images/logo.png)
 
 # ssa-gym : an OpenAI Gym environment for tasking Space Situational Awareness Sensors and some associated agents.
+Motivation: This work lays out a method for training a DRL based policy which can perform onlinesensor tasking
 
-Original repository author : Maj. Ashton Harvey, Devayani Pawar
+Repository author : Maj. Ashton Harvey, Devayani Pawar
+
+## What is SSA ?
+Space Situational Awareness (SSA) is the identification of hazards in space via measuring and predicting the kinematic state and characteristics of space objects (SOs). It is also commonly known as Space Domain Awareness (SDA).  Active topics of research in this area include, but are not limited to:
+![ssa](Images/ssa_tree.png)
+
+### Orbit Tracking using Kalman Filters
 
 The repository includes:
-* [Library of Astro-Transformation functions](envs/transformations.py)
 * [Source code for the SSA-GYM Simulation](envs/ssa_tasker_simple_2.py)
+* [Library of Astro-Transformation functions](envs/transformations.py)
 * [Implementation of Dynamic functions](envs/dynamics.py)
 * [Library of Reward function](envs/reward.py)
 * [Library of Heuristic agents](agents.py)
 * [Test Cases](tests.py)
 * [Results](envs/results.py)
+* [Visualizations](envs/visualizations.py)
 
 ## Requirements
 Python 3.6, and other common packages listed in `requirements.txt`.
@@ -30,14 +38,16 @@ Earth Orientation data for this research. You can see the format of the dataset 
  
 ## Preparing the Data
 
+For right simulation of RSO
+- We transform the location of an object with respect to the surface of the Earth (ITRS) to a  satellite  in  orbit  around  the  Earth  (GCRS) or vice-versa
+- We transform the data to obtain longitude & latitude.
+- We transform the data to obtain the Azimuth, Elevation,and Slant Range (topocentric coordinate reference system) a way to relate an observer on the ground to an object it can observe in the sky.  
+
+[Check this](https://ww2.mathworks.cn/help/map/choose-a-3-d-coordinate-system.html)
 
 ## Getting Started
 
 - Setting up the simulation: [Register's environment with Gym](envs/__init__.py )
-- Simulate orbits and Propagator: []
--  
-- Reward
-- Action
 
 #### Key Concepts used:
 - [Deep Reinforcement Learning](https://spinningup.openai.com/en/latest/)
@@ -63,7 +73,6 @@ https://docs.poliastro.space/en/stable/about.html
 
 ![Process flow](Images/flow.png)
 
-## Training the Model
 
 ## Citation
 ```
@@ -78,5 +87,4 @@ https://docs.poliastro.space/en/stable/about.html
 }
 ```
 
-## Acknowledgement
 
