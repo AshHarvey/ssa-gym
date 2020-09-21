@@ -9,7 +9,6 @@ Repository author : Maj. Ashton Harvey, Devayani Pawar
 Space Situational Awareness (SSA) is the identification of hazards in space via measuring and predicting the kinematic state and characteristics of space objects (SOs). It is also commonly known as Space Domain Awareness (SDA).  Active topics of research in this area include, but are not limited to:
 ![ssa](Images/ssa_tree.png)
 
-### Orbit Tracking using Kalman Filters
 
 The repository includes:
 * [Source code for the SSA-GYM Simulation](envs/ssa_tasker_simple_2.py)
@@ -51,7 +50,7 @@ For right simulation of RSO
 
 #### Key Concepts used:
 - [Deep Reinforcement Learning](https://spinningup.openai.com/en/latest/)
-- Orbital Dynamics
+- [Orbital Mechanics](https://en.wikipedia.org/wiki/Orbital_mechanics)
 - [Kalman Filter for uncertain information](https://www.bzarg.com/p/how-a-kalman-filter-works-in-pictures/)
   - [Unscented Kalman Filter](https://towardsdatascience.com/the-unscented-kalman-filter-anything-ekf-can-do-i-can-do-it-better-ce7c773cf88d): UKF
 is able to provide better estimates given the nonlinearity of the orbital dynamics
