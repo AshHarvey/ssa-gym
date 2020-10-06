@@ -627,5 +627,15 @@ obs = env.reset()
 agent = agent_visible_random
 
 done = False
+for i in tqdm(range(env.n)):
+    if not done:
+
+        action = agent(obs, env)
+
+        obs, reward, done, _ = env.step(action)
+        env.render()
+
+print("Done")
+
 
 
