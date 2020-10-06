@@ -607,3 +607,25 @@ env.plot_sigma_delta()
 print('Test 19 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 19 fitness tests: 20 objects, 15 degree viz limits, aer measurements')
 print(env.fitness_test())
+# !------------ Test 20- simple env v2 - 5 objects, no viz limits, aer measurements - render viz
+import gym
+import numpy as np
+from tqdm import tqdm
+from agents import agent_visible_random
+from envs import env_config
+import matplotlib.pyplot as plt
+
+env_config['obs_returned'] = '2darray'
+env_config['reward_type'] = 'trinary'
+
+env_config['rso_count'] = 5
+env_config['obs_limit'] = -90
+
+env = gym.make('ssa_tasker_simple-v2', **{'config': env_config})
+env.seed(1)
+obs = env.reset()
+agent = agent_visible_random
+
+done = False
+
+
