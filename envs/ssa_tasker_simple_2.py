@@ -4,7 +4,6 @@ from astropy import units as u
 from filterpy.kalman import MerweScaledSigmaPoints as SigmasPoints
 from filterpy.kalman.UKF import UnscentedKalmanFilter as UKF
 from filterpy.common import Q_discrete_white_noise as Q_noise_fn
-from poliastro.bodies import Earth
 from poliastro.core.elements import rv2coe
 from envs.transformations import arcsec2rad, deg2rad, lla2ecef, gcrs2irts_matrix_a,gcrs2irts_matrix_b, get_eops, ecef2aer, ecef2lla
 from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z
@@ -23,6 +22,13 @@ from scipy import stats
 from statsmodels.tsa.stattools import acf
 from . import env_config
 import os
+from poliastro.bodies import Earth, Mars, Sun
+from poliastro.twobody import Orbit
+from poliastro.plotting.static import StaticOrbitPlotter
+from poliastro.bodies import Earth, Mars, Sun
+from poliastro.twobody import Orbit
+from astropy import units as u
+import seaborn as sns # used for color pallettes
 
 os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
 #os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
@@ -42,6 +48,10 @@ seconds: s
 unitless: u
 """
 
+
+
+
+
 class SSA_Tasker_Env(gym.Env):
     """
     The main OpenAI Gym class. It encapsulates an environment with
@@ -56,7 +66,8 @@ class SSA_Tasker_Env(gym.Env):
         observation_space: The Space object corresponding to valid observations
         reward_range: A tuple corresponding to the min and max possible rewards
     """
-    metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['live','none']}
+    visualization = None
 
     def __init__(self, config=env_config):
         # super(SSA_Tasker_Env, self).__init__()
@@ -123,7 +134,7 @@ class SSA_Tasker_Env(gym.Env):
         self.P_filter = np.empty(shape=(self.n, self.m, x_dim, x_dim))  # covariances for all objects at each time step
         self.obs = np.empty(shape=(self.n, self.m, x_dim * 2))  # observations for all objects at each time step
         self.time = [self.t_0 + (timedelta(seconds=self.dt) * i) for i in range(self.n)]  # time for all time steps
-        self.trans_matrix = gcrs2irts_matrix_a(self.time, self.eops)  # used for celestial to terrestrial
+        self.trans_matrix = gcrs2irts_matrix_b(self.time, self.eops)  # used for celestial to terrestrial
         self.z_noise = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the noise added to each observation
         self.z_true = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the true observations which are made
         self.y = np.empty(shape=(self.n, self.m, z_dim))  # array to contain the innovation of each observation
@@ -370,6 +381,32 @@ class SSA_Tasker_Env(gym.Env):
         e = time.time()
         self.runtime['filter_error'] += e - s
 
+    def render(self, mode='live'):
+        # Render the environment to the screen
+        #plt.clf()
+        if mode == 'live':
+
+            if self.i <= self.n:
+                plt.figure()
+
+                op = StaticOrbitPlotter()
+
+
+                orb = [Orbit.from_vectors(Earth, r=(x[:3] / 1000) * u.km, v=(x[3:] / 1000) * u.km / u.s) for x in
+                       self.x_true[self.i]]
+                orb1 = [Orbit.from_vectors(Earth, r=(x[:3] / 1000) * u.km, v=(x[3:] / 1000) * u.km / u.s) for x in
+                        self.x_filter[self.i]]
+                palette = sns.color_palette("hls", len(orb))
+
+                for i, c in enumerate(orb):
+                    new = op.plot(c, label="true", color=palette[i])
+                    new[0].set_linestyle("-")
+                for j, d in enumerate(orb1):
+                    op.plot(d, label="filtered", color=palette[j])
+                plt.pause(0.001)
+                plt.savefig('fig'+str(self.i)+'.png')
+
+
     def visible_objects(self):
         s = time.time()
         RSO_ID = [j for j in range(self.m)]
@@ -516,8 +553,7 @@ class SSA_Tasker_Env(gym.Env):
         s = time.time()
         lla = np.array([ecef2lla(x[:3] @ self.trans_matrix[0]) for x in self.x_true[0]])
 
-        coes = np.array(
-            [rv2coe(k=Earth.k.to_value(u.km ** 3 / u.s ** 2), r=x[:3] / 1000, v=x[3:] / 1000) for x in self.x_true[0]])
+        coes = np.array(rv2coe(k=Earth.k.to_value(u.km ** 3 / u.s ** 2), r=x[:3] / 1000, v=x[3:] / 1000) for x in self.x_true[0])
 
         x = lla[:, 2] / 1000
         y = coes[:, 1]
@@ -525,6 +561,8 @@ class SSA_Tasker_Env(gym.Env):
         plot_regimes(np.column_stack((x, y)), save_path=save_path, display=display)
         e = time.time()
         self.runtime['plot_visibility'] += e - s
+
+
 
     def plot_NIS(self, save_path=None, display=True):
         NIS = []

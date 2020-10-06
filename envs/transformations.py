@@ -198,8 +198,8 @@ def gcrs2irts_matrix_b(t, eop):
 
         # Form celestial-terrestrial matrix (no polar motion yet). */
         rc2ti = erfa.cr(rc2i)
-        # rc2ti = eraRZ(era, rc2ti)
-        rc2ti = erfa.rz(era, rc2ti)
+        rc2ti = eraRZ(era, rc2ti)
+        #rc2ti = erfa.rz(era, rc2ti)
 
         # Polar motion matrix (TIRS->ITRS, IERS 2003). */
         xp = (eop["x"][date] * (1 - day_frac) + eop["x"][date + 1] * day_frac) * DAS2R

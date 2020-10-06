@@ -72,6 +72,9 @@ https://docs.poliastro.space/en/stable/about.html
 
 ![Process flow](Images/flow.png)
 
+## Visualization
+
+![ssa path](Images/ssa_gif.gif)
 
 ## Citation
 ```

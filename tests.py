@@ -535,12 +535,10 @@ agent = agent_visible_random
 done = False
 for i in tqdm(range(env.n)):
     if not done:
-        env.render()
 
         action = agent(obs, env)
 
         obs, reward, done, _ = env.step(action)
-plt.show()
 print('Test 17 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
 print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
@@ -581,6 +579,7 @@ from datetime import datetime
 from envs.dynamics import fx_xyz_farnocchia as fx, hx_aer_erfa as hx, mean_z_uvw as mean_z, residual_z_aer as residual_z, robust_cholesky
 from agents import agent_visible_greedy, agent_shannon ,agent_visible_random
 from envs import env_config
+import imageio
 
 env_config['obs_limit'] = - 90
 env_config['rso_count'] = 20
@@ -591,7 +590,7 @@ env_config['obs_returned'] = 'flatten'
 env = gym.make('ssa_tasker_simple-v2', **{'config': env_config})
 env.seed(0)
 obs = env.reset()
-agent = agent_visible_greedy # agent_visible_greedy # agent_visible_greedy_aer # agent_visible_greedy_aer # agent_visible_random
+agent = agent_shannon # agent_visible_greedy # agent_visible_greedy_aer # agent_visible_greedy_aer # agent_visible_random
 
 done = False
 rewards = []
@@ -608,5 +607,3 @@ env.plot_sigma_delta()
 print('Test 19 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 19 fitness tests: 20 objects, 15 degree viz limits, aer measurements')
 print(env.fitness_test())
-
-print("Done")
