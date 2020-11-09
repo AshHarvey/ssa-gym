@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy import stats
 from statsmodels.tsa.stattools import acf
-from . import env_config
 import os
 from poliastro.bodies import Earth, Mars, Sun
 from poliastro.twobody import Orbit
@@ -29,6 +28,7 @@ from poliastro.bodies import Earth, Mars, Sun
 from poliastro.twobody import Orbit
 from astropy import units as u
 import seaborn as sns # used for color pallettes
+from . import env_config
 
 os.environ['PROJ_LIB'] = 'C:\\Users\\dpawa\\Anaconda3\\envs\\ssa-gym\\Library\\share\\basemap'
 #os.environ['PROJ_LIB'] = '/home/ash/anaconda3/envs/ssa-gym'
@@ -436,16 +436,13 @@ class SSA_Tasker_Env(gym.Env):
     def anees(self):
         """
         Desc:  based on 3.1 in https://pdfs.semanticscholar.org/1c1f/6c864789630d8cd37d5342f67ad8d480f077.pdf
-        :return: the average normalized estimation error squared (ANEES)
+        :return: the average normalized e stimation error squared (ANEES)
         """
-        s = time.time()
-
         delta = self.x_true - self.x_filter
+        print(delta)
         for i in range(self.n):
             for j in range(self.m):
                 self.nees[i, j] = delta[i, j] @ np.linalg.inv(self.P_filter[i, j]) @ delta[i, j]
-        e = time.time()
-        self.runtime['anees'] += e - s
         return np.mean(self.nees)
 
     def failed_filters(self):
@@ -767,8 +764,12 @@ class SSA_Tasker_Env(gym.Env):
                                                           columns=['95% CI'])
 
         nees_cr_points = stats.chi2.ppf(ci, df=6)
-        _ = self.anees
-        nees_points_contained = np.round(np.mean((self.nees > nees_cr_points[0]) * (self.nees < nees_cr_points[1])), 4)
+        delta = self.x_true - self.x_filter
+        for i in range(self.n):
+            for j in range(self.m):
+                self.nees[i, j] = delta[i, j] @ np.linalg.inv(self.P_filter[i, j]) @ delta[i, j]
+        print(self.nees)
+        nees_points_contained = (np.mean((self.nees > nees_cr_points[0]) * (self.nees < nees_cr_points[1])))
         normalized_estimation_error_squared_test = pd.DataFrame(np.round(nees_points_contained * 100, 2),
                                                                 index=['Test 4: NEES χ2'],
                                                                 columns=['95% CI'])

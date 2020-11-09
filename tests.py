@@ -461,7 +461,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 14 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 14 fitness tests: 20 objects, no viz limits, xyz measurements')
-print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
+print(env.fitness_test())
 
 print("Test 15: Plots...")
 env.plot_sigma_delta(save_path=None)
@@ -511,7 +511,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 16 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 16 fitness tests: 20 objects, 15 degree viz limits, xyz measurements')
-print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
+print(env.fitness_test())
 
 # !------------ Test 17 - simple env v2 - 5 objects, no viz limits, aer measurements
 import gym
@@ -541,7 +541,7 @@ for i in tqdm(range(env.n)):
         obs, reward, done, _ = env.step(action)
 print('Test 17 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 17 fitness tests: 5 objects, no viz limits, aer measurements')
-print(env.fitness_test()) # TODO: Test 4 NEES needs fixing
+print(env.fitness_test())
 
 # !------------ Test 18 - simple env v2 - 5 objects, 15 degree viz limits, aer measurements
 import gym
@@ -568,7 +568,7 @@ for i in tqdm(range(env.n)):
 
 print('Test 18 mean reward: ' + str(np.round(np.mean(env.rewards), 4)))
 print('Test 18 fitness tests: 5 objects, 15 degree viz limits, aer measurements')
-print(env.fitness_test()) # TODO: RuntimeWarning: Probably from a nan value in nees, may be related to above
+print(env.fitness_test())
 
 
 # !------------ Test 19 - simple env v2 - 20 objects, 15 degree viz limits, aer measurements
