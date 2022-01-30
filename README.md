@@ -80,14 +80,15 @@ https://docs.poliastro.space/en/stable/about.html
 
 Here are some of the changes I am going to recommend in an upcoming paper as future work:
 - Add support for the variable-step Gauss–Legendre implicit-Runge–Kutta-based approach for orbit and uncertainty propagation
--- This is a more accurate field propagator that can leverage commonalities of the points that need to be propagated by the filter to speed processing
+   - This is a more accurate field propagator that can leverage commonalities of the points that need to be propagated by the filter to speed processing
 - Conversion of the core state from cartesian (GCRS's inertial frame) to J2 Equinoctial Orbit Elements
--- This will greatly improve the performance of the UKF as the J2EqOE state representation is far more conducive to representing the true shape of the covariance vice its cartesian representation
--- I suspect this will also greatly reduce the numerical instabilities that form in the unscented transform which can result in non-singular covariance matrices which I handle with covariance inflation in the current model, but can occasionally crash a run
+   - This will greatly improve the performance of the UKF as the J2EqOE state representation is far more conducive to representing the true shape of the covariance vice its cartesian representation
+   - I suspect this will also greatly reduce the numerical instabilities that form in the unscented transform which can result in non-singular covariance matrices which I handle with covariance inflation in the current model, but can occasionally crash a run
 - Consider replacement of the UKF with a Gauss von Mises distribution filter
--- This will provide moderate gains in covariance realism over a J2EqOE UKF
+   - This will provide moderate gains in covariance realism over a J2EqOE UKF
 
 Suggested helpful resources for future work:
+
 [J. M. Aristoff, J. T. Horwood, and K. T. Alfriend, “On a set of J2 equinoctial orbital elements and their use for uncertainty propagation,” Celestial Mechanics and Dynamical Astronomy, vol. 133, pp. 9-27, 2021.](https://rdcu.be/cgu4e)
 
 [A.B. Poore, J. M. Aristoff, and J. T. Horwood, “Covariance and uncertainty realism in space surveillance and tracking.” Astrodynamics Innovation Committee. Tech. Rep. AD1020892, 2016](https://s11967.pcdn.co/wp-content/uploads/2019/10/Covariance-and-Uncertainty-Realism.pdf)
