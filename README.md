@@ -76,6 +76,36 @@ https://docs.poliastro.space/en/stable/about.html
 
 ![ssa path](Images/ssa_gif.gif)
 
+## Future Work
+
+Here are some of the changes I am going to recommend in an upcoming paper as future work:
+- Add support for the variable-step Gauss–Legendre implicit-Runge–Kutta-based approach for orbit and uncertainty propagation
+-- This is a more accurate field propagator that can leverage commonalities of the points that need to be propagated by the filter to speed processing
+- Conversion of the core state from cartesian (GCRS's inertial frame) to J2 Equinoctial Orbit Elements
+-- This will greatly improve the performance of the UKF as the J2EqOE state representation is far more conducive to representing the true shape of the covariance vice its cartesian representation
+-- I suspect this will also greatly reduce the numerical instabilities that form in the unscented transform which can result in non-singular covariance matrices which I handle with covariance inflation in the current model, but can occasionally crash a run
+- Consider replacement of the UKF with a Gauss von Mises distribution filter
+-- This will provide moderate gains in covariance realism over a J2EqOE UKF
+
+Suggested helpful resources for future work:
+[J. M. Aristoff, J. T. Horwood, and K. T. Alfriend, “On a set of J2 equinoctial orbital elements and their use for uncertainty propagation,” Celestial Mechanics and Dynamical Astronomy, vol. 133, pp. 9-27, 2021.](https://rdcu.be/cgu4e)
+
+[A.B. Poore, J. M. Aristoff, and J. T. Horwood, “Covariance and uncertainty realism in space surveillance and tracking.” Astrodynamics Innovation Committee. Tech. Rep. AD1020892, 2016](https://s11967.pcdn.co/wp-content/uploads/2019/10/Covariance-and-Uncertainty-Realism.pdf)
+
+[J. M. Aristoff, J. T. Horwood, and A. B. Poore, “Implicit Runge-Kutta-based methods for fast, precise, and scalable uncertainty propagation,” Celestial Mechanics and Dynamical Astronomy, vol. 122, pp. 169-182, 2015.](https://link.springer.com/article/10.1007/s10569-015-9614-7)
+
+[J. T. Horwood and A. B. Poore, “Gauss von Mises distribution for improved uncertainty realism in space situational awareness,” SIAM Journal of Uncertainty Quantification, vol. 2, pp. 276-304, 2014.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_SIAMJUQ_2_2014_Gaus.pdf)
+
+[J. M. Aristoff, J. T. Horwood, N. Singh, and A. B. Poore, “Nonlinear uncertainty propagation in orbital elements and transformation to Cartesian space without loss of realism,” Proc. of the 2014 AAS/AIAA Astrodynamics Specialist Conference, (San Diego, CA), Aug. 2014.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_AIAA-2014-4167_NonLinear-Uncertainty.pdf)
+
+[J. T. Horwood, J. M. Aristoff, N. Singh, A. B. Poore, and M. D. Hejduk, “Beyond covariance realism: a new metric for uncertainty realism,” Proc. of the SPIE, Signal and Data Processing of Small Targets, vol. 9092, (Baltimore, MD), May 2014.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_SPIE_9092_2014a_Beyond-Covariance.pdf)
+
+[J. T. Horwood, J. M. Aristoff, N. Singh, and A. B. Poore, “A comparative study of new non-linear uncertainty propagation methods for space surveillance,” Proc. of the SPIE, Signal and Data Processing of Small Targets, vol. 9092, (Baltimore, MD), May 2014.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_SPIE_9092_2014b_NonLinear-Uncertianty.pdf)
+
+[J. M. Aristoff, J. T. Horwood, and A. B. Poore, “Orbit and uncertainty propagation: a comparison of Gauss-Legendre-, Dormand-Prince-, and Chebyshev-Picard-based approaches,” Celestial Mechanics and Dynamical Astronomy, vol. 117, pp. 13-28, 2013.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_CMDA_117_2013_Orbital-1.pdf)
+
+[J. T. Horwood, N. D. Aragon, and A. B. Poore, “Gaussian sum filters for space surveillance: theory and simulations,” Journal of Guidance, Control, and Dynamics, vol. 34, pp. 1839-1851, 2011.](https://s11967.pcdn.co/wp-content/uploads/2019/10/Numerica_AAS-12-159_Space-object-manuever.pdf)
+
 ## Citation
 ```
 @misc{ssa-gym_2020,
